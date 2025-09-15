@@ -103,8 +103,8 @@ const ProfileViewPage: React.FC = () => {
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <div>
-            <h2>{profileData.officer_info.name}</h2>
-            <p>Current Rank: {profileData.officer_info.rank} | Total Reports: {profileData.officer_info.total_reports}</p>
+            <h2>{profileData.officer_info.name.split(',')[0]}</h2>
+            <p>Total Reports: {profileData.officer_info.total_reports}</p>
           </div>
           <div>
             <Link to="/update-profile/1" className="btn btn-secondary" style={{ marginRight: '10px' }}>
@@ -440,8 +440,8 @@ const ProfileViewPage: React.FC = () => {
                 <table className="table">
               <thead>
                 <tr style={{ backgroundColor: '#f8f9fa', color: '#000000' }}>
-                  <th style={{ color: '#000000 !important' }}>FITREP ID</th>
-                  <th style={{ color: '#000000 !important' }}>Period</th>
+                  <th style={{ color: '#000000 !important' }}>Marine</th>
+                  <th style={{ color: '#000000 !important' }}>End Date</th>
                   <th style={{ color: '#000000 !important' }}>FRA Score</th>
                   <th style={{ color: '#000000 !important' }}>Relative Value</th>
                   <th style={{ color: '#000000 !important' }}>Reporting Senior</th>
@@ -450,8 +450,8 @@ const ProfileViewPage: React.FC = () => {
               <tbody>
                 {selectedRankData.reports.map((report) => (
                   <tr key={report.fitrep_id}>
-                    <td>{report.fitrep_id}</td>
-                    <td>{report.period}</td>
+                    <td>{report.organization?.replace('Marine: ', '') || 'Unknown'}</td>
+                    <td>{report.period?.split(' to ')[1] || report.period || 'Unknown'}</td>
                     <td style={{ fontWeight: 'bold' }}>{report.fra_score.toFixed(2)}</td>
                     <td>
                       {report.relative_value ? (
@@ -468,7 +468,7 @@ const ProfileViewPage: React.FC = () => {
                         <span style={{ color: '#666', fontStyle: 'italic' }}>N/A</span>
                       )}
                     </td>
-                    <td>{report.reporting_senior}</td>
+                    <td>{report.reporting_senior?.split(',')[0] || 'Unknown'}</td>
                   </tr>
                 ))}
               </tbody>

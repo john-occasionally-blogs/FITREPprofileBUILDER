@@ -27,7 +27,7 @@ const HomePage: React.FC = () => {
           // Multiple RS profiles exist, show them for selection
           const rsProfiles = officers.map(officer => ({
             id: officer.id,
-            name: `${officer.last_name}, ${officer.first_name}`,
+            name: officer.last_name,
             rank: officer.current_rank,
             fitrep_count: officer.total_reports || 0
           }));
@@ -76,7 +76,7 @@ const HomePage: React.FC = () => {
                   <div className="home-button-icon">👤</div>
                   <div style={{ textAlign: 'left' }}>
                     <div style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>{profile.name}</div>
-                    <small>Rank: {profile.rank} • {profile.fitrep_count} FITREPs</small>
+                    <small>{profile.fitrep_count} FITREPs</small>
                   </div>
                 </Link>
               ))}
