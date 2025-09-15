@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  database:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: fitrep_db
+      POSTGRES_USER: fitrep_user
+      POSTGRES_PASSWORD: fitrep_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - fitrep-network
+
+  # Backend API Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://fitrep_user:fitrep_password@database:5432/fitrep_db
+      PDF_PROCESSOR_URL: http://pdf-processor:8001
+    ports:
+      - "8000:8000"
+    depends_on:
+      - database
+      - pdf-processor
+    volumes:
+      - ./backend:/app
+      - uploaded_files:/app/uploads
+    networks:
+      - fitrep-network
+
+  # PDF Processing Service
+  pdf-processor:
+    build:
+      context: ./pdf-processor
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    volumes:
+      - uploaded_files:/app/uploads
+    networks:
+      - fitrep-network
+
+  # Frontend React Application
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      REACT_APP_BACKEND_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    networks:
+      - fitrep-network
+
+volumes:
+  postgres_data:
+  uploaded_files:
+
+networks:
+  fitrep-network:
+    driver: bridge

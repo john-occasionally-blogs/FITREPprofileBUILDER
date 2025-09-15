@@ -1,0 +1,92 @@
+.App {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  padding: 20px 0;
+  text-align: center;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 2.5rem;
+  font-weight: 700;
+}
+
+.app-header p {
+  margin: 8px 0 0 0;
+  font-size: 1.1rem;
+  opacity: 0.9;
+}
+
+main {
+  flex: 1;
+  padding: 40px 0;
+}
+
+.app-footer {
+  background-color: #f8f9fa;
+  padding: 20px 0;
+  text-align: center;
+  color: #666;
+  border-top: 1px solid #ddd;
+}
+
+.home-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+}
+
+.home-buttons {
+  display: flex;
+  gap: 20px;
+  margin-top: 30px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.home-button {
+  width: 280px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 600;
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.home-button:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+}
+
+.home-button-icon {
+  font-size: 24px;
+}
+
+@media (max-width: 768px) {
+  .home-buttons {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .home-button {
+    width: 100%;
+    max-width: 320px;
+  }
+  
+  .app-header h1 {
+    font-size: 2rem;
+  }
+}
