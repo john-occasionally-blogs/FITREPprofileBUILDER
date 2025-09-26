@@ -166,19 +166,6 @@ const ProfileViewPage: React.FC = () => {
                 padding: '24px',
                 marginBottom: '20px'
               }}>
-                <h4 style={{ color: '#000000 !important', margin: '0 0 10px 0', fontWeight: 'bold' }}>Average RV</h4>
-                <p style={{ fontSize: '2rem', fontWeight: 'bold', color: '#000000 !important', margin: '10px 0' }}>
-                  {selectedRankData.average_rv}
-                </p>
-              </div>
-              <div style={{ 
-                textAlign: 'center', 
-                backgroundColor: '#ffffff', 
-                borderRadius: '8px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                padding: '24px',
-                marginBottom: '20px'
-              }}>
                 <h4 style={{ color: '#000000 !important', margin: '0 0 10px 0', fontWeight: 'bold' }}>Range</h4>
                 <p style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#000000 !important', margin: '10px 0' }}>
                   {selectedRankData.lowest_fra.toFixed(2)} - {selectedRankData.highest_fra.toFixed(2)}
@@ -440,7 +427,7 @@ const ProfileViewPage: React.FC = () => {
                   
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#666', marginTop: '15px', padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '5px' }}>
                     <div>
-                      <strong>Trait Legend:</strong> A=Outstanding, B=Excellent, C=Above Avg, D=Average, E=Below Avg, F=Unsat, G=Unacceptable, H=Not Observed
+                      <strong>Trait Legend:</strong> A=Adverse, B=Excellent, C=Above Avg, D=Average, E=Below Avg, F=Unsat, G=Unacceptable, H=Not Observed
                     </div>
                     <div>
                       <strong>RV Colors:</strong> <span style={{backgroundColor: '#28a745', color: 'white', padding: '2px 4px', borderRadius: '2px'}}>≥93.3</span> <span style={{backgroundColor: '#ffc107', color: 'black', padding: '2px 4px', borderRadius: '2px'}}>86.6-93.2</span> <span style={{backgroundColor: '#dc3545', color: 'white', padding: '2px 4px', borderRadius: '2px'}}>80-86.5</span>
@@ -617,13 +604,13 @@ const ProfileViewPage: React.FC = () => {
                           fontSize: '14px'
                         }}
                       >
-                        <option value="A">A - Outstanding</option>
-                        <option value="B">B - Excellent</option>
-                        <option value="C">C - Above Average</option>
-                        <option value="D">D - Average</option>
-                        <option value="E">E - Below Average</option>
-                        <option value="F">F - Unsatisfactory</option>
-                        <option value="G">G - Unacceptable</option>
+                        <option value="A">A - Adverse</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                        <option value="D">D</option>
+                        <option value="E">E</option>
+                        <option value="F">F</option>
+                        <option value="G">G</option>
                         <option value="H">H - Not Observed</option>
                       </select>
                     </div>
