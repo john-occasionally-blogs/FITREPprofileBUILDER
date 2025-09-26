@@ -18,6 +18,7 @@ class PredictImpactRequest(BaseModel):
 class PredictImpactResponse(BaseModel):
     current: Dict
     predicted: Dict
+    updated_existing_reports: List[Dict]
     new_reports: List[Dict]
 
 class ValidateScoresRequest(BaseModel):
@@ -40,6 +41,8 @@ async def predict_report_impact(
     
     # Get current FRA scores for all Marines this RS has reported on for the specified rank
     # Exclude EN (End of Active Service) reports from impact calculations
+    print(f"DEBUG: Searching for RS='{request.reporting_senior}', rank='{request.rank}'")
+    
     current_reports = db.query(FitReport).filter(
         FitReport.reporting_senior_name == request.reporting_senior,
         FitReport.rank_at_time == request.rank,
@@ -47,7 +50,15 @@ async def predict_report_impact(
         FitReport.occasion_type != 'EN'
     ).all()
     
+    print(f"DEBUG: Found {len(current_reports)} current reports")
+    for report in current_reports:
+        print(f"DEBUG: Report {report.fitrep_id}: FRA={report.fra_score}, RS='{report.reporting_senior_name}'")
+    
     current_fra_scores = [Decimal(str(report.fra_score)) for report in current_reports]
+    current_report_ids = [report.fitrep_id for report in current_reports]
+    
+    print(f"DEBUG: FRA scores: {current_fra_scores}")
+    print(f"DEBUG: Report IDs: {current_report_ids}")
     
     # Calculate FRA scores for proposed reports
     new_fra_scores = []
@@ -68,8 +79,15 @@ async def predict_report_impact(
         current_fra_scores=current_fra_scores,
         new_fra_scores=new_fra_scores,
         rank=request.rank,
-        reporting_senior=request.reporting_senior
+        reporting_senior=request.reporting_senior,
+        current_report_ids=current_report_ids
     )
+    
+    print(f"DEBUG: Impact analysis result:")
+    print(f"DEBUG: Current: {impact_analysis['current']}")
+    print(f"DEBUG: Predicted: {impact_analysis['predicted']}")
+    print(f"DEBUG: Updated existing: {impact_analysis['updated_existing_reports']}")
+    print(f"DEBUG: New reports: {impact_analysis['new_reports']}")
     
     return PredictImpactResponse(**impact_analysis)
 

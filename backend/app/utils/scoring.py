@@ -155,7 +155,7 @@ def calculate_relative_values(fra_scores: List[Tuple[int, Decimal]], rank: str, 
     return result
 
 def predict_impact(current_fra_scores: List[Decimal], new_fra_scores: List[Decimal], 
-                  rank: str, reporting_senior: str) -> Dict:
+                  rank: str, reporting_senior: str, current_report_ids: List[int] = None) -> Dict:
     """
     Predict the impact of adding new FITREP scores to an existing profile.
     
@@ -198,6 +198,14 @@ def predict_impact(current_fra_scores: List[Decimal], new_fra_scores: List[Decim
             "lowest_fra": min(combined_scores),
             "fra_change": round(predicted_avg_fra - current_avg_fra, 2)
         },
+        "updated_existing_reports": [
+            {
+                "fitrep_id": current_report_ids[i] if current_report_ids and i < len(current_report_ids) else i,
+                "index": i,
+                "fra_score": float(score),
+                "updated_rv": predicted_rvs[i]["relative_value"]
+            } for i, score in enumerate(current_fra_scores)
+        ],
         "new_reports": [
             {
                 "fra_score": float(score),

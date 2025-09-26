@@ -202,18 +202,38 @@ const ProfileViewPage: React.FC = () => {
 {expandedView ? (
             (() => {
               // Collect all reports for the selected rank and filter them properly
-              const allRankReports = profileData.marines.flatMap(marine => 
+              const allRankReports = profileData.marines.flatMap((marine, marineIndex) => 
                 marine.fitreports
                   .filter(report => report.rank_at_time === selectedRank)
-                  .map(report => ({
-                    ...report,
-                    marineName: report.organization?.replace('Marine: ', '') || 'Unknown Marine',
-                    isHypothetical: false
-                  }))
+                  .map((report, reportIndex) => {
+                    // Check if we have updated RV values from what-if scenario
+                    let updatedRV = report.relative_value;
+                    if (whatIfResults && whatIfResults.updated_existing_reports) {
+                      console.log(`DEBUG: Looking for RV update for report ${report.fitrep_id}`);
+                      console.log('DEBUG: Available updates:', whatIfResults.updated_existing_reports);
+                      
+                      const rvUpdate = whatIfResults.updated_existing_reports.find((update: any) => 
+                        update.fitrep_id === report.fitrep_id
+                      );
+                      if (rvUpdate) {
+                        console.log(`DEBUG: Found RV update for ${report.fitrep_id}: ${report.relative_value} -> ${rvUpdate.updated_rv}`);
+                        updatedRV = rvUpdate.updated_rv;
+                      } else {
+                        console.log(`DEBUG: No RV update found for ${report.fitrep_id}`);
+                      }
+                    }
+
+                    return {
+                      ...report,
+                      marineName: report.organization?.replace('Marine: ', '') || 'Unknown Marine',
+                      relative_value: updatedRV,
+                      isHypothetical: false
+                    };
+                  })
               );
 
               // Add hypothetical reports with calculated FRA and predicted RV
-              const hypotheticalReportsWithCalculations = hypotheticalReports.map(hypReport => {
+              const hypotheticalReportsWithCalculations = hypotheticalReports.map((hypReport, hypIndex) => {
                 // Calculate FRA for this hypothetical report
                 const fraSum = TRAIT_NAMES.reduce((sum, trait) => {
                   const score = hypReport.traitScores[trait];
@@ -226,11 +246,8 @@ const ProfileViewPage: React.FC = () => {
 
                 // For now, show a predicted RV based on what-if results if available
                 let predictedRV = null;
-                if (whatIfResults && whatIfResults.new_reports) {
-                  const matchingResult = whatIfResults.new_reports.find((result: any, index: number) => 
-                    index < hypotheticalReports.length
-                  );
-                  predictedRV = matchingResult?.predicted_rv || null;
+                if (whatIfResults && whatIfResults.new_reports && whatIfResults.new_reports[hypIndex]) {
+                  predictedRV = whatIfResults.new_reports[hypIndex]?.predicted_rv || null;
                 }
 
                 return {
@@ -308,7 +325,7 @@ const ProfileViewPage: React.FC = () => {
                       <h4 style={{ margin: '0 0 10px 0', color: '#0056b3' }}>What-If Impact Analysis</h4>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
                         <div>
-                          <strong>Current Average FRA:</strong> {whatIfResults.current?.average_fra?.toFixed(2) || 'N/A'}
+                          <strong>Current Average FRA:</strong> {typeof whatIfResults.current?.average_fra === 'number' ? whatIfResults.current.average_fra.toFixed(2) : 'N/A'}
                         </div>
                         <div>
                           <strong>Predicted Average FRA:</strong> 
@@ -316,8 +333,8 @@ const ProfileViewPage: React.FC = () => {
                             color: whatIfResults.predicted?.fra_change > 0 ? '#28a745' : '#dc3545',
                             marginLeft: '5px'
                           }}>
-                            {whatIfResults.predicted?.average_fra?.toFixed(2) || 'N/A'}
-                            {whatIfResults.predicted?.fra_change && (
+                            {typeof whatIfResults.predicted?.average_fra === 'number' ? whatIfResults.predicted.average_fra.toFixed(2) : 'N/A'}
+                            {whatIfResults.predicted?.fra_change !== undefined && typeof whatIfResults.predicted.fra_change === 'number' && (
                               <span style={{ fontSize: '12px' }}>
                                 ({whatIfResults.predicted.fra_change > 0 ? '+' : ''}{whatIfResults.predicted.fra_change.toFixed(2)})
                               </span>
@@ -376,7 +393,7 @@ const ProfileViewPage: React.FC = () => {
                             </td>
                             <td>
                               <span style={{ fontWeight: 'bold', color: '#CC0000' }}>
-                                {report.fra_score?.toFixed(2) || 'N/A'}
+                                {typeof report.fra_score === 'number' ? report.fra_score.toFixed(2) : 'N/A'}
                               </span>
                             </td>
                             <td>
@@ -452,7 +469,7 @@ const ProfileViewPage: React.FC = () => {
                   <tr key={report.fitrep_id}>
                     <td>{report.organization?.replace('Marine: ', '') || 'Unknown'}</td>
                     <td>{report.period?.split(' to ')[1] || report.period || 'Unknown'}</td>
-                    <td style={{ fontWeight: 'bold' }}>{report.fra_score.toFixed(2)}</td>
+                    <td style={{ fontWeight: 'bold' }}>{typeof report.fra_score === 'number' ? report.fra_score.toFixed(2) : 'N/A'}</td>
                     <td>
                       {report.relative_value ? (
                         <span style={{ 
@@ -634,8 +651,19 @@ const ProfileViewPage: React.FC = () => {
 
                   setIsCalculating(true);
                   try {
-                    // Get the RS name from profileData
-                    const rsName = profileData?.officer_info.name || '';
+                    // Get the RS name from profileData and format it to match database format
+                    // Database stores as "LAST, FIRST" but profile returns "LAST, FIRST MIDDLE"
+                    let rsName = profileData?.officer_info.name || '';
+                    if (rsName) {
+                      // Convert "LAST, FIRST MIDDLE" to "LAST, FIRST" 
+                      const parts = rsName.split(', ');
+                      if (parts.length >= 2) {
+                        const lastName = parts[0];
+                        const firstAndMiddle = parts[1].split(' ');
+                        const firstName = firstAndMiddle[0];
+                        rsName = `${lastName}, ${firstName}`;
+                      }
+                    }
                     
                     // Convert hypothetical reports to the format expected by the API
                     const proposedReports = hypotheticalReports.map(report => report.traitScores);
@@ -648,6 +676,8 @@ const ProfileViewPage: React.FC = () => {
                       proposed_reports: proposedReports
                     });
                     
+                    console.log('DEBUG: What-if results received:', impactResult);
+                    console.log('DEBUG: Updated existing reports:', impactResult.updated_existing_reports);
                     setWhatIfResults(impactResult);
                     setShowWhatIfModal(false);
                   } catch (error) {
