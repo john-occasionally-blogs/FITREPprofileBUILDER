@@ -343,6 +343,10 @@ async def multi_rs_upload(
                 "fitrep_count": fitrep_count
             })
         
+        # Recalculate RV values for all affected reporting seniors
+        print("Step 4: Calculating relative values for all RS profiles...")
+        await _recalculate_all_relative_values(db)
+        
         return {
             "message": f"Successfully created {len(unique_rs_officers)} RS profiles with {total_processed} FITREPs",
             "rs_profiles": profiles_summary,
@@ -865,6 +869,73 @@ async def _recalculate_relative_values(officer_id: int, db: Session):
                 db.add(rv_record)
     
     db.commit()
+
+async def _recalculate_all_relative_values(db: Session):
+    """Recalculate relative values for all FITREPs across all reporting seniors."""
+    
+    print("  Analyzing all FITREPs for RV calculation...")
+    
+    # Get all FITREPs and group by rank and reporting senior
+    all_reports = db.query(FitReport).filter(
+        FitReport.fra_score.is_not(None),
+        FitReport.reporting_senior_name.is_not(None)
+    ).all()
+    
+    # Group by (rank, reporting_senior)
+    groups = {}
+    for report in all_reports:
+        # Exclude EN (End of Active Service) reports from RV calculations
+        if report.occasion_type and report.occasion_type.upper() == 'EN':
+            continue
+            
+        key = (report.rank_at_time, report.reporting_senior_name)
+        if key not in groups:
+            groups[key] = []
+        groups[key].append((report.id, report.fra_score))
+    
+    total_groups = len(groups)
+    groups_with_rv = 0
+    
+    # Calculate RV for each group that has enough reports
+    for (rank, rs_name), fra_scores in groups.items():
+        if len(fra_scores) >= 3:  # Need at least 3 reports for RV calculation
+            print(f"  Calculating RV for {rs_name} {rank} rank ({len(fra_scores)} reports)")
+            
+            rv_results = calculate_relative_values(fra_scores, rank, rs_name)
+            
+            # Save/update RV records
+            for fitrep_id, rv_data in rv_results.items():
+                # Delete existing RV record
+                db.query(RelativeValue).filter(RelativeValue.fitrep_id == fitrep_id).delete()
+                
+                # Create new RV record
+                rv_record = RelativeValue(
+                    fitrep_id=fitrep_id,
+                    rank=rv_data["rank"],
+                    reporting_senior=rv_data["reporting_senior"],
+                    relative_value=rv_data["relative_value"],
+                    total_reports_for_rank=rv_data["total_reports_for_rank"],
+                    highest_fra_for_rank=rv_data["highest_fra_for_rank"],
+                    average_fra_for_rank=rv_data["average_fra_for_rank"],
+                    minimum_fra_for_rank=rv_data["minimum_fra_for_rank"]
+                )
+                db.add(rv_record)
+            
+            groups_with_rv += 1
+        else:
+            print(f"  Skipping {rs_name} {rank} rank (only {len(fra_scores)} reports, need 3+)")
+    
+    print(f"  Calculated RV values for {groups_with_rv}/{total_groups} rank/RS combinations")
+    db.commit()
+
+@router.post("/recalculate-all-rv")
+async def recalculate_all_rv(db: Session = Depends(get_db)):
+    """Manually trigger recalculation of all relative values."""
+    try:
+        await _recalculate_all_relative_values(db)
+        return {"message": "Successfully recalculated all relative values"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error recalculating RV values: {str(e)}")
 
 @router.delete("/{fitrep_id}")
 async def delete_fitrep(fitrep_id: int, db: Session = Depends(get_db)):

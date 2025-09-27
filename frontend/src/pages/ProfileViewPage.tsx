@@ -3,6 +3,8 @@ import { useParams, Link } from 'react-router-dom';
 import { ProfileData } from '../types';
 import { profileApi, scoringApi } from '../services/api';
 import { LETTER_TO_NUMERIC } from '../utils/scoring';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 // 14 trait names in order
 const TRAIT_NAMES = [
@@ -35,6 +37,105 @@ const getRVColor = (rv: number): string => {
   if (rv >= 86.6) return '#ffc107'; // Yellow
   if (rv >= 80) return '#dc3545';   // Red
   return '#6c757d'; // Gray for edge cases
+};
+
+// Export functions
+const exportToCSV = (data: any[], rank: string, officerName: string) => {
+  const headers = [
+    'Marine Name',
+    'End Date', 
+    'FRA',
+    'RV',
+    ...TRAIT_NAMES.map(trait => trait.split(' ').map(word => word.slice(0, 3)).join(' '))
+  ];
+
+  const csvContent = [
+    headers.join(','),
+    ...data.map(report => [
+      `"${report.marineName}"`,
+      report.period_to ? new Date(report.period_to).toLocaleDateString() : 'N/A',
+      typeof report.fra_score === 'number' ? report.fra_score.toFixed(2) : 'N/A',
+      report.relative_value || 'N/A',
+      ...TRAIT_NAMES.map(traitName => {
+        const trait = report.trait_scores?.find((t: any) => t.trait_name === traitName);
+        return trait?.score_letter || 'H';
+      })
+    ].join(','))
+  ].join('\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `${officerName}_${rank}_Reports_${new Date().toISOString().split('T')[0]}.csv`;
+  link.click();
+};
+
+const exportToPDF = (data: any[], rank: string, officerName: string) => {
+  const doc = new jsPDF('l', 'mm', 'a4'); // Landscape orientation for better table fit
+  
+  // Add title
+  doc.setFontSize(16);
+  doc.text(`${officerName} - ${rank} Reports`, 15, 15);
+  
+  // Add export date
+  doc.setFontSize(10);
+  doc.text(`Exported: ${new Date().toLocaleDateString()}`, 15, 25);
+
+  // Prepare table data
+  const headers = [
+    'Marine',
+    'End Date',
+    'FRA',
+    'RV',
+    ...TRAIT_NAMES.map(trait => trait.split(' ').map(word => word.slice(0, 3)).join(' '))
+  ];
+
+  const tableData = data.map(report => [
+    report.marineName,
+    report.period_to ? new Date(report.period_to).toLocaleDateString() : 'N/A',
+    typeof report.fra_score === 'number' ? report.fra_score.toFixed(2) : 'N/A',
+    report.relative_value || 'N/A',
+    ...TRAIT_NAMES.map(traitName => {
+      const trait = report.trait_scores?.find((t: any) => t.trait_name === traitName);
+      return trait?.score_letter || 'H';
+    })
+  ]);
+
+  // Add table
+  autoTable(doc, {
+    head: [headers],
+    body: tableData,
+    startY: 35,
+    styles: { 
+      fontSize: 8,
+      cellPadding: 2
+    },
+    headStyles: {
+      fillColor: [66, 139, 202],
+      textColor: 255
+    },
+    columnStyles: {
+      0: { cellWidth: 20 }, // Marine Name
+      1: { cellWidth: 18 }, // End Date
+      2: { cellWidth: 12 }, // FRA
+      3: { cellWidth: 12 }, // RV
+    },
+    didParseCell: function(data) {
+      // Color code RV column
+      if (data.column.index === 3 && data.section === 'body') {
+        const rv = parseFloat(data.cell.text[0]);
+        if (!isNaN(rv)) {
+          if (rv >= 93.3) data.cell.styles.fillColor = [40, 167, 69]; // Green
+          else if (rv >= 86.6) data.cell.styles.fillColor = [255, 193, 7]; // Yellow
+          else if (rv >= 80) data.cell.styles.fillColor = [220, 53, 69]; // Red
+          
+          if (rv >= 80) data.cell.styles.textColor = 255; // White text for colored cells
+        }
+      }
+    }
+  });
+
+  doc.save(`${officerName}_${rank}_Reports_${new Date().toISOString().split('T')[0]}.pdf`);
 };
 
 const ProfileViewPage: React.FC = () => {
@@ -298,6 +399,31 @@ const ProfileViewPage: React.FC = () => {
                           Clear What-If
                         </button>
                       )}
+                      
+                      <div style={{ borderLeft: '1px solid #ddd', paddingLeft: '10px', marginLeft: '10px', display: 'flex', gap: '5px' }}>
+                        <button
+                          onClick={() => {
+                            const officerName = profileData?.officer_info.name.split(',')[0] || 'Officer';
+                            exportToCSV(sortedReports, selectedRank, officerName);
+                          }}
+                          className="btn btn-secondary"
+                          style={{ fontSize: '12px', padding: '6px 12px' }}
+                          title="Export to CSV"
+                        >
+                          📊 CSV
+                        </button>
+                        <button
+                          onClick={() => {
+                            const officerName = profileData?.officer_info.name.split(',')[0] || 'Officer';
+                            exportToPDF(sortedReports, selectedRank, officerName);
+                          }}
+                          className="btn btn-secondary"
+                          style={{ fontSize: '12px', padding: '6px 12px' }}
+                          title="Export to PDF"
+                        >
+                          📄 PDF
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -520,7 +646,7 @@ const ProfileViewPage: React.FC = () => {
               </button>
             </div>
 
-            <div style={{ marginBottom: '20px' }}>
+            <div style={{ marginBottom: '20px', display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
               <button 
                 onClick={() => {
                   const newId = `hyp-${Date.now()}`;
@@ -539,6 +665,88 @@ const ProfileViewPage: React.FC = () => {
               >
                 + Add Another Report
               </button>
+              
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <span style={{ fontSize: '14px', color: '#666' }}>or</span>
+                <select
+                  id="cloneReportSelect"
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: '4px',
+                    border: '1px solid #ddd',
+                    fontSize: '14px',
+                    minWidth: '200px'
+                  }}
+                  defaultValue=""
+                >
+                  <option value="" disabled>Select report to clone...</option>
+                  {(() => {
+                    // Get existing reports for this rank to populate clone dropdown
+                    const existingReports = profileData.marines.flatMap((marine, marineIndex) => 
+                      marine.fitreports
+                        .filter(report => report.rank_at_time === selectedRank)
+                        .map((report, reportIndex) => ({
+                          ...report,
+                          marineName: report.organization?.replace('Marine: ', '') || 'Unknown Marine'
+                        }))
+                    );
+                    
+                    return existingReports.map(report => (
+                      <option key={report.fitrep_id} value={report.fitrep_id}>
+                        {report.marineName} ({report.period_to ? new Date(report.period_to).toLocaleDateString() : 'N/A'}) - FRA: {typeof report.fra_score === 'number' ? report.fra_score.toFixed(2) : 'N/A'}
+                      </option>
+                    ));
+                  })()}
+                </select>
+                <button 
+                  onClick={() => {
+                    const selectElement = document.getElementById('cloneReportSelect') as HTMLSelectElement;
+                    const selectedFitrepId = selectElement.value;
+                    
+                    if (!selectedFitrepId) {
+                      alert('Please select a report to clone');
+                      return;
+                    }
+                    
+                    // Find the selected report
+                    const existingReports = profileData.marines.flatMap((marine, marineIndex) => 
+                      marine.fitreports
+                        .filter(report => report.rank_at_time === selectedRank)
+                        .map((report, reportIndex) => ({
+                          ...report,
+                          marineName: report.organization?.replace('Marine: ', '') || 'Unknown Marine'
+                        }))
+                    );
+                    
+                    const selectedReport = existingReports.find(report => report.fitrep_id === selectedFitrepId);
+                    
+                    if (!selectedReport || !selectedReport.trait_scores) {
+                      alert('Cannot clone report: trait scores not available');
+                      return;
+                    }
+                    
+                    // Convert trait scores to the format needed for hypothetical reports
+                    const clonedScores = TRAIT_NAMES.reduce((acc, trait) => {
+                      const traitScore = selectedReport.trait_scores.find(ts => ts.trait_name === trait);
+                      acc[trait] = traitScore?.score_letter || 'D';
+                      return acc;
+                    }, {} as {[key: string]: string});
+                    
+                    const newId = `hyp-${Date.now()}`;
+                    setHypotheticalReports([...hypotheticalReports, {
+                      id: newId,
+                      marineName: `${selectedReport.marineName} (Clone)`,
+                      traitScores: clonedScores
+                    }]);
+                    
+                    // Reset the select
+                    selectElement.value = '';
+                  }}
+                  className="btn btn-primary"
+                >
+                  Clone Report
+                </button>
+              </div>
             </div>
 
             {hypotheticalReports.map((report, reportIndex) => (
