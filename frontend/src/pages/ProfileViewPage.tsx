@@ -39,6 +39,28 @@ const getRVColor = (rv: number): string => {
   return '#6c757d'; // Gray for edge cases
 };
 
+// Helper function to get custom trait abbreviations
+const getTraitAbbreviation = (traitName: string): string => {
+  const abbreviations: { [key: string]: string } = {
+    "Mission Accomplishment": "Mission Acc",
+    "Proficiency": "Proficiency", 
+    "Individual Character": "Courage",
+    "Effectiveness Under Stress": "Eff Und Str",
+    "Initiative": "Initiative",
+    "Leadership": "Leading",
+    "Developing Subordinates": "Dev Sub",
+    "Setting the Example": "Setting Example",
+    "Ensuring Well-being of Subordinates": "Ens Wel Sub",
+    "Communication Skills": "Communication",
+    "Intellect and Wisdom": "PME",
+    "Decision Making Ability": "Decision Mak",
+    "Judgment": "Judgement",
+    "Fulfillment of Evaluation Responsibilities": "Evaluations"
+  };
+  
+  return abbreviations[traitName] || traitName.split(' ').map(word => word.slice(0, 3)).join(' ');
+};
+
 // Export functions
 const exportToCSV = (data: any[], rank: string, officerName: string) => {
   const headers = [
@@ -46,7 +68,7 @@ const exportToCSV = (data: any[], rank: string, officerName: string) => {
     'End Date', 
     'FRA',
     'RV',
-    ...TRAIT_NAMES.map(trait => trait.split(' ').map(word => word.slice(0, 3)).join(' '))
+    ...TRAIT_NAMES.map(trait => getTraitAbbreviation(trait))
   ];
 
   const csvContent = [
@@ -87,7 +109,7 @@ const exportToPDF = (data: any[], rank: string, officerName: string) => {
     'End Date',
     'FRA',
     'RV',
-    ...TRAIT_NAMES.map(trait => trait.split(' ').map(word => word.slice(0, 3)).join(' '))
+    ...TRAIT_NAMES.map(trait => getTraitAbbreviation(trait))
   ];
 
   const tableData = data.map(report => [
@@ -254,7 +276,7 @@ const ProfileViewPage: React.FC = () => {
                 padding: '24px',
                 marginBottom: '20px'
               }}>
-                <h4 style={{ color: '#000000', margin: '0 0 10px 0' }}>Average FRA</h4>
+                <h4 style={{ color: '#000000', margin: '0 0 10px 0' }}>Average (FRA)</h4>
                 <p style={{ fontSize: '2rem', fontWeight: 'bold', color: '#CC0000', margin: '10px 0' }}>
                   {selectedRankData.average_fra.toFixed(2)}
                 </p>
@@ -438,14 +460,14 @@ const ProfileViewPage: React.FC = () => {
                       <h4 style={{ margin: '0 0 10px 0', color: '#0056b3' }}>What-If Impact Analysis</h4>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
                         <div>
-                          <strong>Current Average FRA:</strong> {
+                          <strong>Current Average (FRA):</strong> {
                             typeof whatIfResults.current?.average_fra === 'number' && whatIfResults.current.average_fra > 0 
                               ? whatIfResults.current.average_fra.toFixed(2) 
                               : selectedRankData?.average_fra?.toFixed(2) || 'N/A'
                           }
                         </div>
                         <div>
-                          <strong>Predicted Average FRA:</strong> 
+                          <strong>Predicted Average (FRA):</strong> 
                           <span style={{ 
                             color: whatIfResults.predicted?.fra_change > 0 ? '#28a745' : '#dc3545',
                             marginLeft: '5px'
@@ -483,7 +505,7 @@ const ProfileViewPage: React.FC = () => {
                               textOrientation: 'mixed',
                               maxWidth: '45px'
                             }}>
-                              {trait.split(' ').map(word => word.slice(0, 3)).join(' ')}
+                              {getTraitAbbreviation(trait)}
                             </th>
                           ))}
                         </tr>
