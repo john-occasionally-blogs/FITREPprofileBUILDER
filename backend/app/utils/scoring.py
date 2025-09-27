@@ -187,16 +187,16 @@ def predict_impact(current_fra_scores: List[Decimal], new_fra_scores: List[Decim
     return {
         "current": {
             "total_reports": len(current_fra_scores),
-            "average_fra": round(current_avg_fra, 2),
-            "highest_fra": max(current_fra_scores) if current_fra_scores else 0,
-            "lowest_fra": min(current_fra_scores) if current_fra_scores else 0,
+            "average_fra": float(round(current_avg_fra, 2)),
+            "highest_fra": float(max(current_fra_scores)) if current_fra_scores else 0,
+            "lowest_fra": float(min(current_fra_scores)) if current_fra_scores else 0,
         },
         "predicted": {
             "total_reports": len(combined_scores),
-            "average_fra": round(predicted_avg_fra, 2),
-            "highest_fra": max(combined_scores),
-            "lowest_fra": min(combined_scores),
-            "fra_change": round(predicted_avg_fra - current_avg_fra, 2)
+            "average_fra": float(round(predicted_avg_fra, 2)),
+            "highest_fra": float(max(combined_scores)),
+            "lowest_fra": float(min(combined_scores)),
+            "fra_change": float(round(predicted_avg_fra - current_avg_fra, 2))
         },
         "updated_existing_reports": [
             {

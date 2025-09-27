@@ -312,7 +312,11 @@ const ProfileViewPage: React.FC = () => {
                       <h4 style={{ margin: '0 0 10px 0', color: '#0056b3' }}>What-If Impact Analysis</h4>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
                         <div>
-                          <strong>Current Average FRA:</strong> {typeof whatIfResults.current?.average_fra === 'number' ? whatIfResults.current.average_fra.toFixed(2) : 'N/A'}
+                          <strong>Current Average FRA:</strong> {
+                            typeof whatIfResults.current?.average_fra === 'number' && whatIfResults.current.average_fra > 0 
+                              ? whatIfResults.current.average_fra.toFixed(2) 
+                              : selectedRankData?.average_fra?.toFixed(2) || 'N/A'
+                          }
                         </div>
                         <div>
                           <strong>Predicted Average FRA:</strong> 
