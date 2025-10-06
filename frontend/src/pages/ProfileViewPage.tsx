@@ -241,23 +241,116 @@ const ProfileViewPage: React.FC = () => {
       <div className="card">
         <h3>Select Rank to Analyze</h3>
         <div style={{ marginBottom: '20px' }}>
-          <select 
-            value={selectedRank} 
+          <select
+            value={selectedRank}
             onChange={(e) => setSelectedRank(e.target.value)}
             style={{ padding: '8px 12px', fontSize: '16px', borderRadius: '4px', border: '1px solid #ddd' }}
           >
+            <option value="ALL_RANKS">All Ranks</option>
             {Object.keys(profileData.rank_breakdown).map(rank => (
               <option key={rank} value={rank}>{rank}</option>
             ))}
           </select>
         </div>
 
-        {selectedRankData && (
+        {selectedRank === 'ALL_RANKS' ? (
+          <>
+            {Object.keys(profileData.rank_breakdown).map(rank => {
+              const rankData = profileData.rank_breakdown[rank];
+              return (
+                <div key={rank} style={{ marginBottom: '40px', borderBottom: '2px solid #ddd', paddingBottom: '30px' }}>
+                  <h3 style={{ marginBottom: '20px', color: '#003366' }}>{rank}</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '30px' }}>
+                    <div style={{
+                      textAlign: 'center',
+                      backgroundColor: '#ffffff',
+                      borderRadius: '8px',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                      padding: '24px',
+                      marginBottom: '20px'
+                    }}>
+                      <h4 style={{ color: '#000000 !important', margin: '0 0 10px 0', fontWeight: 'bold' }}>Total Reports</h4>
+                      <p style={{ fontSize: '2rem', fontWeight: 'bold', color: '#000000 !important', margin: '10px 0' }}>
+                        {rankData.total_reports}
+                      </p>
+                    </div>
+                    <div style={{
+                      textAlign: 'center',
+                      backgroundColor: '#ffffff',
+                      borderRadius: '8px',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                      padding: '24px',
+                      marginBottom: '20px'
+                    }}>
+                      <h4 style={{ color: '#000000', margin: '0 0 10px 0' }}>Average (FRA)</h4>
+                      <p style={{ fontSize: '2rem', fontWeight: 'bold', color: '#CC0000', margin: '10px 0' }}>
+                        {rankData.average_fra.toFixed(2)}
+                      </p>
+                    </div>
+                    <div style={{
+                      textAlign: 'center',
+                      backgroundColor: '#ffffff',
+                      borderRadius: '8px',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                      padding: '24px',
+                      marginBottom: '20px'
+                    }}>
+                      <h4 style={{ color: '#000000 !important', margin: '0 0 10px 0', fontWeight: 'bold' }}>Range</h4>
+                      <p style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#000000 !important', margin: '10px 0' }}>
+                        {rankData.lowest_fra.toFixed(2)} - {rankData.highest_fra.toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4>Individual Reports for {rank}</h4>
+                    <table className="table">
+                      <thead>
+                        <tr style={{ backgroundColor: '#f8f9fa', color: '#000000' }}>
+                          <th style={{ color: '#000000 !important' }}>Marine</th>
+                          <th style={{ color: '#000000 !important' }}>End Date</th>
+                          <th style={{ color: '#000000 !important' }}>FRA Score</th>
+                          <th style={{ color: '#000000 !important' }}>Relative Value</th>
+                          <th style={{ color: '#000000 !important' }}>Reporting Senior</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rankData.reports.map((report) => (
+                          <tr key={report.fitrep_id}>
+                            <td>{report.organization?.replace('Marine: ', '') || 'Unknown'}</td>
+                            <td>{report.period?.split(' to ')[1] || report.period || 'Unknown'}</td>
+                            <td style={{ fontWeight: 'bold' }}>{typeof report.fra_score === 'number' ? report.fra_score.toFixed(2) : 'N/A'}</td>
+                            <td>
+                              {report.relative_value ? (
+                                <span style={{
+                                  backgroundColor: getRVColor(report.relative_value),
+                                  color: 'white',
+                                  padding: '4px 8px',
+                                  borderRadius: '4px',
+                                  fontWeight: 'bold'
+                                }}>
+                                  {report.relative_value}
+                                </span>
+                              ) : (
+                                <span style={{ color: '#666', fontStyle: 'italic' }}>N/A</span>
+                              )}
+                            </td>
+                            <td>{report.reporting_senior?.split(',')[0] || 'Unknown'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })}
+          </>
+        ) : selectedRankData && (
           <>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '30px' }}>
-              <div style={{ 
-                textAlign: 'center', 
-                backgroundColor: '#ffffff', 
+              <div style={{
+                textAlign: 'center',
+                backgroundColor: '#ffffff',
                 borderRadius: '8px',
                 boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
                 padding: '24px',
@@ -268,9 +361,9 @@ const ProfileViewPage: React.FC = () => {
                   {selectedRankData.total_reports}
                 </p>
               </div>
-              <div style={{ 
-                textAlign: 'center', 
-                backgroundColor: '#ffffff', 
+              <div style={{
+                textAlign: 'center',
+                backgroundColor: '#ffffff',
                 borderRadius: '8px',
                 boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
                 padding: '24px',
@@ -281,9 +374,9 @@ const ProfileViewPage: React.FC = () => {
                   {selectedRankData.average_fra.toFixed(2)}
                 </p>
               </div>
-              <div style={{ 
-                textAlign: 'center', 
-                backgroundColor: '#ffffff', 
+              <div style={{
+                textAlign: 'center',
+                backgroundColor: '#ffffff',
                 borderRadius: '8px',
                 boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
                 padding: '24px',
@@ -749,7 +842,7 @@ const ProfileViewPage: React.FC = () => {
                     
                     // Convert trait scores to the format needed for hypothetical reports
                     const clonedScores = TRAIT_NAMES.reduce((acc, trait) => {
-                      const traitScore = selectedReport.trait_scores.find(ts => ts.trait_name === trait);
+                      const traitScore = selectedReport.trait_scores?.find(ts => ts.trait_name === trait);
                       acc[trait] = traitScore?.score_letter || 'D';
                       return acc;
                     }, {} as {[key: string]: string});
