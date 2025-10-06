@@ -142,7 +142,6 @@ const DataReviewPage: React.FC = () => {
                   <th>FRA Score</th>
                   <th>RV</th>
                   <th>Reporting Senior</th>
-                  <th>Organization</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -151,7 +150,7 @@ const DataReviewPage: React.FC = () => {
                   <tr key={report.id}>
                     <td style={{ fontWeight: 'bold' }}>{report.fitrep_id}</td>
                     <td>
-                      {report.last_name || 'Unknown'}, {report.first_name || 'Unknown'}
+                      {report.organization?.replace('Marine: ', '') || 'Unknown'}
                     </td>
                     <td>
                       <span style={{
@@ -171,17 +170,17 @@ const DataReviewPage: React.FC = () => {
                       </div>
                     </td>
                     <td>
-                      {report.fra_score ? 
+                      {report.fra_score ?
                         <span style={{ fontWeight: 'bold', color: '#CC0000' }}>
                           {report.fra_score.toFixed(2)}
-                        </span> : 
+                        </span> :
                         <span style={{ color: '#666', fontStyle: 'italic' }}>N/A</span>
                       }
                     </td>
                     <td>
                       {report.relative_value ? (
                         <span style={{
-                          backgroundColor: report.relative_value >= 90 ? '#28a745' : 
+                          backgroundColor: report.relative_value >= 90 ? '#28a745' :
                                          report.relative_value >= 85 ? '#ffc107' : '#dc3545',
                           color: report.relative_value >= 85 ? 'white' : 'black',
                           padding: '4px 8px',
@@ -194,8 +193,7 @@ const DataReviewPage: React.FC = () => {
                         <span style={{ color: '#666', fontStyle: 'italic' }}>N/A</span>
                       )}
                     </td>
-                    <td>{report.organization?.replace('Marine: ', '') || 'Unknown'}</td>
-                    <td>{report.reporting_senior_name || 'Unknown'}</td>
+                    <td>{report.reporting_senior_name?.split(',')[0] || 'Unknown'}</td>
                     <td>
                       <button
                         onClick={() => handleDeleteReport(report.id)}
