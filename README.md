@@ -30,8 +30,8 @@ A containerized web application for analyzing Marine Corps Fitness Reports (FITR
 
 1. **Clone the repository**
    ```bash
-   git clone <your-repo-url>
-   cd vibeFITREP
+   git clone https://github.com/john-occasionally-blogs/FITREPprofileBUILDER.git
+   cd FITREPprofileBUILDER
    ```
 
 2. **Start the application**
