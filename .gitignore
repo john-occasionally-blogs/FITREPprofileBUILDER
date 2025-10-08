@@ -128,3 +128,4 @@ frontend/build/
 *.csvfitrep.db
 *.db
 *.pdf
+*.png
