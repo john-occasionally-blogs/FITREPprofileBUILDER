@@ -29,21 +29,17 @@ class FitReportResponse(BaseModel):
 class ProcessFilesRequest(BaseModel):
     officer_id: int
 
-@router.get("/officer/{officer_id}", response_model=List[FitReportResponse])
-async def get_officer_fitreports(officer_id: int, db: Session = Depends(get_db)):
-    """Get all FITREPs for a specific officer."""
-    officer = db.query(Officer).filter(Officer.id == officer_id).first()
-    if not officer:
-        raise HTTPException(status_code=404, detail="Officer not found")
-    
-    fitreports = db.query(FitReport).filter(FitReport.officer_id == officer_id).all()
-    
+@router.get("/all", response_model=List[FitReportResponse])
+async def get_all_fitreports(db: Session = Depends(get_db)):
+    """Get all FITREPs across all officers."""
+    fitreports = db.query(FitReport).all()
+
     # Get relative values for each report
     response_data = []
     for report in fitreports:
         rv_data = db.query(RelativeValue).filter(RelativeValue.fitrep_id == report.id).first()
         rv_value = rv_data.relative_value if rv_data else None
-        
+
         response_data.append(FitReportResponse(
             id=report.id,
             officer_id=report.officer_id,
@@ -56,7 +52,37 @@ async def get_officer_fitreports(officer_id: int, db: Session = Depends(get_db))
             organization=report.organization,
             reporting_senior_name=report.reporting_senior_name
         ))
-    
+
+    return response_data
+
+@router.get("/officer/{officer_id}", response_model=List[FitReportResponse])
+async def get_officer_fitreports(officer_id: int, db: Session = Depends(get_db)):
+    """Get all FITREPs for a specific officer."""
+    officer = db.query(Officer).filter(Officer.id == officer_id).first()
+    if not officer:
+        raise HTTPException(status_code=404, detail="Officer not found")
+
+    fitreports = db.query(FitReport).filter(FitReport.officer_id == officer_id).all()
+
+    # Get relative values for each report
+    response_data = []
+    for report in fitreports:
+        rv_data = db.query(RelativeValue).filter(RelativeValue.fitrep_id == report.id).first()
+        rv_value = rv_data.relative_value if rv_data else None
+
+        response_data.append(FitReportResponse(
+            id=report.id,
+            officer_id=report.officer_id,
+            fitrep_id=report.fitrep_id,
+            rank_at_time=report.rank_at_time,
+            period_from=str(report.period_from),
+            period_to=str(report.period_to),
+            fra_score=float(report.fra_score) if report.fra_score else None,
+            relative_value=rv_value,
+            organization=report.organization,
+            reporting_senior_name=report.reporting_senior_name
+        ))
+
     return response_data
 
 @router.post("/auto-upload")
@@ -77,42 +103,24 @@ async def auto_upload_create_profile(
     
     first_file = files[0]
     try:
-        import tempfile
-        import shutil
-        from pathlib import Path
-        import sys
-        
-        # Save first file temporarily
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
-            shutil.copyfileobj(first_file.file, tmp_file)
-            tmp_file_path = tmp_file.name
-        
         # Reset file pointer for later use
         first_file.file.seek(0)
-        
-        # Extract data using enhanced extractor
-        # Use extractor from project root directory
-        project_root = Path(__file__).parent.parent.parent.parent.absolute()
-        extractor_path = project_root / "fitrep_extractor.py"
-        print(f"DEBUG: Looking for extractor at: {extractor_path}")
-        print(f"DEBUG: File exists? {extractor_path.exists()}")
-        
-        # Import using absolute path
-        import importlib.util
-        if extractor_path.exists():
-            spec = importlib.util.spec_from_file_location("fitrep_extractor", str(extractor_path))
-            fitrep_module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(fitrep_module)
-            FITREPExtractor = fitrep_module.FITREPExtractor
-        else:
-            raise ImportError(f"Cannot find fitrep_extractor.py at {extractor_path}")
-        
-        extractor = FITREPExtractor()
-        extracted_data = extractor.extract_from_pdf(Path(tmp_file_path))
-        
-        # Clean up temp file
-        os.unlink(tmp_file_path)
-        
+
+        # Extract data using PDF processor service
+        pdf_processor_url = os.getenv("PDF_PROCESSOR_URL", "http://pdf-processor:8001")
+
+        # Create form data with the file
+        files_data = {"file": (first_file.filename, first_file.file, "application/pdf")}
+
+        # Call PDF processor service
+        response = httpx.post(f"{pdf_processor_url}/extract-fitrep", files=files_data, timeout=30.0)
+
+        if response.status_code != 200:
+            raise HTTPException(status_code=500, detail=f"PDF processor failed: {response.text}")
+
+        result = response.json()
+        extracted_data = result.get("data", {})
+
         if not extracted_data:
             raise HTTPException(status_code=400, detail="Could not extract data from PDF")
         
@@ -212,36 +220,31 @@ async def multi_rs_upload(
         import tempfile, shutil, os
         from pathlib import Path
         from datetime import datetime
-        
-        # Import extractor
-        project_root = Path(__file__).parent.parent.parent.parent.absolute()
-        extractor_path = project_root / "fitrep_extractor.py"
-        
-        import importlib.util
-        if extractor_path.exists():
-            spec = importlib.util.spec_from_file_location("fitrep_extractor", str(extractor_path))
-            fitrep_module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(fitrep_module)
-            FITREPExtractor = fitrep_module.FITREPExtractor
-        else:
-            raise HTTPException(status_code=500, detail=f"Cannot find extractor at {extractor_path}")
-        
-        extractor = FITREPExtractor()
+
+        # Use PDF processor service
+        pdf_processor_url = os.getenv("PDF_PROCESSOR_URL", "http://pdf-processor:8001")
+
         unique_rs_officers = {}  # {rs_key: officer_id}
         fitrep_assignments = []  # List of (file_data, rs_officer_id) tuples
-        
+
         print("Step 1: Extracting RS data from each FITREP...")
-        
+
         # Process each FITREP to extract RS data and build unique RS list
         for file_idx, file in enumerate(files):
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
-                file.file.seek(0)
-                shutil.copyfileobj(file.file, tmp_file)
-                tmp_file_path = tmp_file.name
-            
             try:
-                # Extract data from this FITREP
-                extracted_data = extractor.extract_from_pdf(Path(tmp_file_path))
+                # Reset file pointer
+                file.file.seek(0)
+
+                # Call PDF processor service
+                files_data = {"file": (file.filename, file.file, "application/pdf")}
+                response = httpx.post(f"{pdf_processor_url}/extract-fitrep", files=files_data, timeout=30.0)
+
+                if response.status_code != 200:
+                    print(f"  File {file_idx + 1}: PDF processor failed: {response.text}")
+                    continue
+
+                result = response.json()
+                extracted_data = result.get("data", {})
                 
                 if not extracted_data:
                     print(f"  File {file_idx + 1}: No data extracted")
@@ -294,9 +297,9 @@ async def multi_rs_upload(
                     'rs_officer_id': unique_rs_officers[rs_key],
                     'rs_name': rs_last_name
                 })
-                
-            finally:
-                os.unlink(tmp_file_path)
+
+            except Exception as e:
+                print(f"  File {file_idx + 1}: Error processing - {str(e)}")
         
         print(f"\\nStep 2: Created {len(unique_rs_officers)} unique RS profiles")
         for rs_key, officer_id in unique_rs_officers.items():
@@ -402,6 +405,7 @@ async def process_single_fitrep_for_rs(
         fitrep_data = {
             "officer_id": rs_officer_id,  # This is the RS, not the Marine
             "fitrep_id": str(fitrep_id),
+            "report_date": period_to,  # Report date is the same as period end date
             "period_to": period_to,
             "rank_at_time": grade,
             "occasion_type": occ,
@@ -937,18 +941,14 @@ async def recalculate_all_rv(db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error recalculating RV values: {str(e)}")
 
-@router.delete("/{fitrep_id}")
-async def delete_fitrep(fitrep_id: int, db: Session = Depends(get_db)):
-    """Delete a specific FITREP and all associated data."""
-    fitrep = db.query(FitReport).filter(FitReport.id == fitrep_id).first()
-    if not fitrep:
-        raise HTTPException(status_code=404, detail="FITREP not found")
-    
-    # Delete associated trait scores and relative values (cascade should handle this)
-    db.delete(fitrep)
+@router.delete("/all")
+async def delete_all_fitreports(db: Session = Depends(get_db)):
+    """Delete ALL FITREPs across all officers."""
+    # Delete all FITREPs (cascade will handle related records)
+    deleted_count = db.query(FitReport).delete()
     db.commit()
-    
-    return {"message": "FITREP deleted successfully"}
+
+    return {"message": f"Deleted all {deleted_count} FITREPs from database"}
 
 @router.delete("/officer/{officer_id}/all")
 async def delete_all_officer_fitreports(officer_id: int, db: Session = Depends(get_db)):
@@ -956,9 +956,22 @@ async def delete_all_officer_fitreports(officer_id: int, db: Session = Depends(g
     officer = db.query(Officer).filter(Officer.id == officer_id).first()
     if not officer:
         raise HTTPException(status_code=404, detail="Officer not found")
-    
+
     # Delete all FITREPs for this officer (cascade will handle related records)
     deleted_count = db.query(FitReport).filter(FitReport.officer_id == officer_id).delete()
     db.commit()
-    
+
     return {"message": f"Deleted {deleted_count} FITREPs for officer {officer_id}"}
+
+@router.delete("/{fitrep_id}")
+async def delete_fitrep(fitrep_id: int, db: Session = Depends(get_db)):
+    """Delete a specific FITREP and all associated data."""
+    fitrep = db.query(FitReport).filter(FitReport.id == fitrep_id).first()
+    if not fitrep:
+        raise HTTPException(status_code=404, detail="FITREP not found")
+
+    # Delete associated trait scores and relative values (cascade should handle this)
+    db.delete(fitrep)
+    db.commit()
+
+    return {"message": "FITREP deleted successfully"}

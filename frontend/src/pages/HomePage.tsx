@@ -8,6 +8,29 @@ const HomePage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [rsProfiles, setRsProfiles] = useState<Array<{id: number, name: string, rank: string, fitrep_count: number}> | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [showRegularMenu, setShowRegularMenu] = useState(false);
+
+  const checkForExistingProfiles = async () => {
+    try {
+      const officers = await officerApi.getOfficers();
+      if (officers.length === 1) {
+        setAutoProfileId(officers[0].id);
+      } else if (officers.length > 1) {
+        // Multiple RS profiles exist, show them for selection
+        const rsProfiles = officers.map(officer => ({
+          id: officer.id,
+          name: officer.last_name,
+          rank: officer.current_rank,
+          fitrep_count: officer.total_reports || 0
+        }));
+        setRsProfiles(rsProfiles);
+      }
+    } catch (error) {
+      console.log('No existing profiles found');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
     // Check if we came from multi-RS upload with profile data
@@ -17,28 +40,6 @@ const HomePage: React.FC = () => {
       setIsLoading(false);
       return;
     }
-
-    const checkForExistingProfiles = async () => {
-      try {
-        const officers = await officerApi.getOfficers();
-        if (officers.length === 1) {
-          setAutoProfileId(officers[0].id);
-        } else if (officers.length > 1) {
-          // Multiple RS profiles exist, show them for selection
-          const rsProfiles = officers.map(officer => ({
-            id: officer.id,
-            name: officer.last_name,
-            rank: officer.current_rank,
-            fitrep_count: officer.total_reports || 0
-          }));
-          setRsProfiles(rsProfiles);
-        }
-      } catch (error) {
-        console.log('No existing profiles found');
-      } finally {
-        setIsLoading(false);
-      }
-    };
 
     checkForExistingProfiles();
   }, [location.state]);
@@ -60,16 +61,28 @@ const HomePage: React.FC = () => {
           </div>
         )}
 
+        {showRegularMenu && rsProfiles && (
+          <div className="home-buttons" style={{ marginBottom: '40px' }}>
+            <Link to="/create-profile" className="home-button btn-primary">
+              <div className="home-button-icon">📁</div>
+              <div>
+                <div>Create New Profile</div>
+                <small>Upload FITREPs to create new reporting senior profile</small>
+              </div>
+            </Link>
+          </div>
+        )}
+
         {rsProfiles && (
           <div className="card" style={{ marginBottom: '40px' }}>
             <h3>Select a Reporting Senior Profile to View</h3>
             <p>Multiple Reporting Senior profiles were created from your uploaded FITREPs. Choose one to analyze:</p>
-            
+
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginTop: '20px' }}>
               {rsProfiles.map((profile) => (
-                <Link 
+                <Link
                   key={profile.id}
-                  to={`/profile/${profile.id}`} 
+                  to={`/profile/${profile.id}`}
                   className="home-button btn-primary"
                   style={{ textDecoration: 'none', backgroundColor: '#CC0000' }}
                 >
@@ -81,16 +94,21 @@ const HomePage: React.FC = () => {
                 </Link>
               ))}
             </div>
-            
-            <div style={{ textAlign: 'center', marginTop: '20px' }}>
-              <button 
-                onClick={() => {setRsProfiles(null); setSuccessMessage(null);}}
-                className="btn btn-secondary"
-                style={{ padding: '10px 20px' }}
-              >
-                Continue with Regular Menu
-              </button>
-            </div>
+
+            {!showRegularMenu && (
+              <div style={{ textAlign: 'center', marginTop: '20px' }}>
+                <button
+                  onClick={() => {
+                    setShowRegularMenu(true);
+                    setSuccessMessage(null);
+                  }}
+                  className="btn btn-secondary"
+                  style={{ padding: '10px 20px' }}
+                >
+                  Continue with Regular Menu
+                </button>
+              </div>
+            )}
           </div>
         )}
         
@@ -107,7 +125,7 @@ const HomePage: React.FC = () => {
                 <small>Upload FITREPs to create initial profile</small>
               </div>
             </Link>
-            
+
             {autoProfileId && (
               <>
                 <Link to={`/profile/${autoProfileId}`} className="home-button btn-secondary">
@@ -117,7 +135,7 @@ const HomePage: React.FC = () => {
                     <small>Continue with existing profile analysis</small>
                   </div>
                 </Link>
-                
+
                 <Link to={`/update-profile/${autoProfileId}`} className="home-button marine-gold" style={{ color: '#000' }}>
                   <div className="home-button-icon">📝</div>
                   <div>
@@ -127,7 +145,7 @@ const HomePage: React.FC = () => {
                 </Link>
               </>
             )}
-            
+
             {!autoProfileId && (
               <div className="home-button" style={{ opacity: 0.6, cursor: 'not-allowed', backgroundColor: '#e9ecef' }}>
                 <div className="home-button-icon">📊</div>

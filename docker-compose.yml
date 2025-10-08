@@ -10,7 +10,6 @@ services:
       POSTGRES_PASSWORD: fitrep_password
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "5432:5432"
     networks:
@@ -30,7 +29,6 @@ services:
       - database
       - pdf-processor
     volumes:
-      - ./backend:/app
       - uploaded_files:/app/uploads
     networks:
       - fitrep-network
@@ -38,8 +36,8 @@ services:
   # PDF Processing Service
   pdf-processor:
     build:
-      context: ./pdf-processor
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./pdf-processor/Dockerfile
     ports:
       - "8001:8001"
     volumes:
@@ -58,9 +56,6 @@ services:
       - "3000:3000"
     depends_on:
       - backend
-    volumes:
-      - ./frontend/src:/app/src
-      - ./frontend/public:/app/public
     networks:
       - fitrep-network
 

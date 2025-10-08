@@ -97,6 +97,11 @@ export const fitreportApi = {
     return response.data;
   },
 
+  getAllReports: async () => {
+    const response = await apiClient.get(`/fitreports/all`);
+    return response.data;
+  },
+
   getOfficerReports: async (officerId: number) => {
     const response = await apiClient.get(`/fitreports/officer/${officerId}`);
     return response.data;
@@ -104,6 +109,11 @@ export const fitreportApi = {
 
   deleteReport: async (fitrepId: number) => {
     const response = await apiClient.delete(`/fitreports/${fitrepId}`);
+    return response.data;
+  },
+
+  deleteAllReports: async () => {
+    const response = await apiClient.delete(`/fitreports/all`);
     return response.data;
   },
 

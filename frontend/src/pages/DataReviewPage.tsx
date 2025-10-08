@@ -29,8 +29,8 @@ const DataReviewPage: React.FC = () => {
   const fetchAllReports = async () => {
     try {
       setLoading(true);
-      // For now, we'll get reports for officer ID 1 - you can modify this to get all reports
-      const data = await fitreportApi.getOfficerReports(1);
+      // Get ALL reports across all officers
+      const data = await fitreportApi.getAllReports();
       setReports(data);
     } catch (error) {
       console.error('Error fetching reports:', error);
@@ -61,21 +61,21 @@ const DataReviewPage: React.FC = () => {
   };
 
   const handleDeleteAll = async () => {
-    if (!window.confirm('Are you sure you want to delete ALL FITREPs? This action cannot be undone.')) {
+    if (!window.confirm('Are you sure you want to delete ALL FITREPs in the entire database? This action cannot be undone.')) {
       return;
     }
 
-    if (!window.confirm('This will delete all FITREP data permanently. Are you absolutely sure?')) {
+    if (!window.confirm('This will delete ALL FITREP data for ALL Reporting Seniors permanently. Are you absolutely sure?')) {
       return;
     }
 
     try {
       setLoading(true);
-      await fitreportApi.deleteAllOfficerReports(1); // Officer ID 1 for now
-      
+      await fitreportApi.deleteAllReports();
+
       // Clear local state
       setReports([]);
-      
+
       alert('All FITREPs deleted successfully');
     } catch (error) {
       console.error('Error deleting all reports:', error);
