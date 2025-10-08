@@ -7,6 +7,8 @@ services:
     environment:
       POSTGRES_DB: fitrep_db
       POSTGRES_USER: fitrep_user
+      # NOTE: This is an example password for local development only.
+      # Change this in production environments using environment variables.
       POSTGRES_PASSWORD: fitrep_password
     volumes:
       - postgres_data:/var/lib/postgresql/data
