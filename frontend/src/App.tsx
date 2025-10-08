@@ -12,8 +12,8 @@ function App() {
     <div className="App">
       <header className="app-header marine-blue">
         <div className="container">
-          <h1>FITREP Assistance Tool</h1>
-          <p>Marine Corps Officer Performance Analysis</p>
+          <h1>Marine FITREP Assistance Tool</h1>
+          <p>FITREP Profile Builder and Analysis Tool</p>
         </div>
       </header>
       
