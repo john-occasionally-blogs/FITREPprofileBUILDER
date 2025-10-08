@@ -1,6 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from app.services.fitrep_extractor import FitrepExtractor
+from app.services.fitrep_extractor import FITREPExtractor
 from typing import List
 import shutil
 import os
@@ -21,7 +21,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-extractor = FitrepExtractor()
+extractor = FITREPExtractor()
 
 @app.get("/")
 async def root():

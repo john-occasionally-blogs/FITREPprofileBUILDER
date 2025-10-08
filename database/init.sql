@@ -18,7 +18,7 @@ CREATE TABLE fitreports (
     officer_id INTEGER REFERENCES officers(id) ON DELETE CASCADE,
     fitrep_id VARCHAR(50) NOT NULL, -- FITREP ID from form
     report_date DATE NOT NULL,
-    period_from DATE NOT NULL,
+    period_from DATE,  -- Made nullable as extractor may not always provide this
     period_to DATE NOT NULL,
     rank_at_time VARCHAR(20) NOT NULL,
     organization VARCHAR(200),
@@ -92,8 +92,7 @@ CREATE INDEX idx_relative_values_rank_rs ON relative_values(rank, reporting_seni
 CREATE INDEX idx_profiles_rs_rank ON profiles(reporting_senior_id, rank);
 
 -- Insert sample data for testing
-INSERT INTO officers (last_name, first_name, middle_initial, service_number, current_rank) 
-VALUES ('DOE', 'JOHN', 'A', '1234567890', 'CAPT');
+-- Removed default DOE officer insert - officers are created during FITREP upload
 
 -- Function to update the updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
