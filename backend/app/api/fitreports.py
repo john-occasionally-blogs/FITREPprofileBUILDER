@@ -226,6 +226,7 @@ async def multi_rs_upload(
 
         unique_rs_officers = {}  # {rs_key: officer_id}
         fitrep_assignments = []  # List of (file_data, rs_officer_id) tuples
+        extraction_failures = []  # Track files that fail during extraction
 
         print("Step 1: Extracting RS data from each FITREP...")
 
@@ -241,13 +242,23 @@ async def multi_rs_upload(
 
                 if response.status_code != 200:
                     print(f"  File {file_idx + 1}: PDF processor failed: {response.text}")
+                    extraction_failures.append({
+                        'filename': file.filename,
+                        'status': 'failed',
+                        'message': f'PDF extraction failed: {response.text[:100]}'
+                    })
                     continue
 
                 result = response.json()
                 extracted_data = result.get("data", {})
-                
+
                 if not extracted_data:
                     print(f"  File {file_idx + 1}: No data extracted")
+                    extraction_failures.append({
+                        'filename': file.filename,
+                        'status': 'failed',
+                        'message': 'No data could be extracted from PDF'
+                    })
                     continue
                 
                 # Get RS info
@@ -300,6 +311,11 @@ async def multi_rs_upload(
 
             except Exception as e:
                 print(f"  File {file_idx + 1}: Error processing - {str(e)}")
+                extraction_failures.append({
+                    'filename': file.filename,
+                    'status': 'failed',
+                    'message': f'Extraction error: {str(e)}'
+                })
         
         print(f"\\nStep 2: Created {len(unique_rs_officers)} unique RS profiles")
         for rs_key, officer_id in unique_rs_officers.items():
@@ -308,30 +324,60 @@ async def multi_rs_upload(
             print(f"  - {rs_officer.last_name}: {fitrep_count} FITREPs")
         
         print("\\nStep 3: Processing FITREPs with correct RS assignments...")
-        
+
         # Now process each FITREP with its correct RS assignment
         total_processed = 0
+        processing_details = []  # Track detailed results
+
         for assignment in fitrep_assignments:
             try:
                 # Reset file pointer
                 assignment['file'].file.seek(0)
-                
+
                 # Process this single FITREP for the correct RS
                 result = await process_single_fitrep_for_rs(
-                    assignment['file'], 
+                    assignment['file'],
                     assignment['extracted_data'],
                     assignment['rs_officer_id'],
                     assignment['file_idx'],
                     db
                 )
-                
-                if result:
+
+                if result == "success":
                     total_processed += 1
+                    processing_details.append({
+                        'filename': assignment['file'].filename,
+                        'status': 'success',
+                        'message': f"Processed for RS: {assignment['rs_name']}"
+                    })
                     print(f"  ✓ Processed {assignment['file'].filename} for RS: {assignment['rs_name']}")
-                else:
+                elif result == "duplicate":
+                    processing_details.append({
+                        'filename': assignment['file'].filename,
+                        'status': 'skipped',
+                        'message': 'Duplicate FITREP ID - already in database'
+                    })
                     print(f"  ⚠️ Skipped {assignment['file'].filename} (duplicate FITREP ID)")
-                
+                elif result == "non_observed":
+                    processing_details.append({
+                        'filename': assignment['file'].filename,
+                        'status': 'skipped',
+                        'message': 'Non-Observed report (all traits marked H)'
+                    })
+                    print(f"  ⚠️ Skipped {assignment['file'].filename} (Non-Observed report)")
+                else:
+                    processing_details.append({
+                        'filename': assignment['file'].filename,
+                        'status': 'failed',
+                        'message': f'Unknown result: {result}'
+                    })
+
             except Exception as e:
+                processing_details.append({
+                    'filename': assignment['file'].filename,
+                    'status': 'failed',
+                    'message': str(e)
+                })
                 print(f"  ✗ Error processing {assignment['file'].filename}: {str(e)}")
         
         # Get final profile summary
@@ -349,12 +395,16 @@ async def multi_rs_upload(
         # Recalculate RV values for all affected reporting seniors
         print("Step 4: Calculating relative values for all RS profiles...")
         await _recalculate_all_relative_values(db)
-        
+
+        # Combine extraction failures with processing details
+        all_processing_details = extraction_failures + processing_details
+
         return {
             "message": f"Successfully created {len(unique_rs_officers)} RS profiles with {total_processed} FITREPs",
             "rs_profiles": profiles_summary,
             "total_files_processed": total_processed,
-            "unique_rs_count": len(unique_rs_officers)
+            "unique_rs_count": len(unique_rs_officers),
+            "processing_details": all_processing_details  # Include detailed results from both extraction and processing
         }
         
     except Exception as e:
@@ -395,7 +445,7 @@ async def process_single_fitrep_for_rs(
         existing_fitrep = db.query(FitReport).filter(FitReport.fitrep_id == str(fitrep_id)).first()
         if existing_fitrep:
             print(f"  ⚠️  Skipping duplicate FITREP ID: {fitrep_id} (already exists for Officer ID: {existing_fitrep.officer_id})")
-            return False  # Skip this FITREP
+            return "duplicate"  # Skip this FITREP
         
         # Get RS name from database for correct display
         rs_officer = db.query(Officer).filter(Officer.id == rs_officer_id).first()
@@ -433,8 +483,14 @@ async def process_single_fitrep_for_rs(
         
         # Use proper FRA calculation that handles H grades correctly
         fra_score = calculate_fra_score(trait_scores)
-        fitrep_data["fra_score"] = float(fra_score) if fra_score else None
-        
+
+        # Check if this is a non-observed report (FRA score is None when all traits are H)
+        if fra_score is None:
+            print(f"  ⚠️  Skipping non-observed report (all traits marked H)")
+            return "non_observed"
+
+        fitrep_data["fra_score"] = float(fra_score)
+
         # Create FitReport
         db_fitrep = FitReport(**fitrep_data)
         db.add(db_fitrep)
@@ -467,7 +523,7 @@ async def process_single_fitrep_for_rs(
                 db.add(trait_score)
         
         db.commit()
-        return True
+        return "success"
         
     except Exception as e:
         print(f"Error processing single FITREP: {str(e)}")

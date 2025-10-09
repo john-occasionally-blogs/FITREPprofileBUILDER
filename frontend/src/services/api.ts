@@ -53,7 +53,7 @@ export const fitreportApi = {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
-      timeout: 120000, // 120 seconds for auto processing
+      timeout: 600000, // 10 minutes for auto processing (supports large batches)
     });
 
     return response.data;
@@ -64,6 +64,7 @@ export const fitreportApi = {
     rs_profiles: Array<{ id: number; name: string; rank: string; fitrep_count: number }>;
     total_files_processed: number;
     unique_rs_count: number;
+    processing_details?: Array<{ filename: string; status: string; message: string }>;
   }> => {
     const formData = new FormData();
     files.forEach(file => {
@@ -74,7 +75,7 @@ export const fitreportApi = {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
-      timeout: 120000, // 120 seconds for multi-RS processing
+      timeout: 600000, // 10 minutes for multi-RS processing (supports large batches)
     });
 
     return response.data;
@@ -91,7 +92,7 @@ export const fitreportApi = {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
-      timeout: 60000, // 60 seconds for file processing
+      timeout: 600000, // 10 minutes for file processing (supports large batches)
     });
 
     return response.data;

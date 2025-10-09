@@ -94,7 +94,7 @@ export interface ProfileSummary {
 
 export interface ProcessingResult {
   filename: string;
-  status: 'success' | 'error';
+  status: 'success' | 'error' | 'failed' | 'skipped';
   fitrep_id?: string;
   fra_score?: number;
   error?: string;

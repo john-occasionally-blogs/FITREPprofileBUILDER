@@ -14,6 +14,9 @@ const CreateProfilePage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [processingResults, setProcessingResults] = useState<BatchProcessingResult | null>(null);
   const [uploadMode, setUploadMode] = useState<'auto' | 'manual'>('auto');
+  const [timeRemaining, setTimeRemaining] = useState<number>(0);
+  const [estimatedTotal, setEstimatedTotal] = useState<number>(0);
+  const [createdProfiles, setCreatedProfiles] = useState<any[]>([]);
   const [officerData, setOfficerData] = useState({
     last_name: '',
     first_name: '',
@@ -41,78 +44,88 @@ const CreateProfilePage: React.FC = () => {
 
   const handleUpload = async () => {
     if (files.length === 0) return;
-    
+
+    console.log('[UPLOAD START] Version: 2025-10-08-v2');
     setUploading(true);
     setProgress(0);
     setError(null);
+    setProcessingComplete(false);
 
     try {
       if (uploadMode === 'auto') {
         // Auto mode: Extract everything from PDFs
+        console.log('[AUTO MODE] Starting auto upload');
         setCurrentFile('🔍 Extracting officer info from PDF...');
-        
+
         const startTime = Date.now();
+        const estimatedTimePerFile = 9000; // 9 seconds per file average
+        const totalEstimatedTime = files.length * estimatedTimePerFile;
+        setEstimatedTotal(totalEstimatedTime);
+
         const updateProgress = () => {
           const elapsed = Date.now() - startTime;
-          const expectedTime = files.length * 10000; // 10 seconds per file for auto
-          const timeProgress = Math.min((elapsed / expectedTime) * 90, 90);
-          setProgress(10 + timeProgress);
+          const remaining = Math.max(0, totalEstimatedTime - elapsed);
+          setTimeRemaining(remaining);
+
+          // More accurate progress: 0-90% during processing, 90-100% for finalization
+          const processingProgress = Math.min((elapsed / totalEstimatedTime) * 90, 90);
+          setProgress(processingProgress);
         };
-        
-        const progressInterval = setInterval(updateProgress, 1000);
-        
+
+        const progressInterval = setInterval(updateProgress, 500); // Update every 500ms for smoother progress
+
         try {
           const results = await fitreportApi.multiRsUpload(files);
+          console.log('Upload complete, results:', results);
+
           clearInterval(progressInterval);
-          
+          setTimeRemaining(0);
+
+          // Use detailed processing results from backend
+          const successCount = results.processing_details?.filter((d: any) => d.status === 'success').length || results.total_files_processed;
+          const skippedCount = results.processing_details?.filter((d: any) => d.status === 'skipped').length || 0;
+          const failedCount = results.processing_details?.filter((d: any) => d.status === 'failed').length || (files.length - results.total_files_processed - skippedCount);
+
           setProcessingResults({
             total_files: files.length,
-            successful: results.total_files_processed,
-            failed: files.length - results.total_files_processed,
-            results: files.map((file, i) => ({
+            successful: successCount,
+            failed: failedCount + skippedCount,
+            results: results.processing_details?.map((detail: any) => ({
+              filename: detail.filename,
+              status: detail.status === 'success' ? 'success' as const : 'failed' as const,
+              fitrep_id: detail.filename,
+              fra_score: undefined,
+              error: detail.status !== 'success' ? detail.message : undefined
+            })) || files.map((file, i) => ({
               filename: file.name,
               status: 'success' as const,
               fitrep_id: `processed_${i}`,
               fra_score: undefined
             }))
           });
-          setProgress(95);
-          setCurrentFile(`✅ Created ${results.unique_rs_count} RS profiles!`);
-          
-          // Brief delay to show success
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          
+
+          console.log('Setting created profiles:', results.rs_profiles);
+          setCreatedProfiles(results.rs_profiles || []);
+
+          console.log('Setting progress to 100');
           setProgress(100);
+
+          console.log('Setting current file message');
+          setCurrentFile(`✅ Successfully created ${results.unique_rs_count} RS profile${results.unique_rs_count > 1 ? 's' : ''}!`);
+
+          console.log('Setting processing complete to true');
           setProcessingComplete(true);
-          
-          if (results.total_files_processed > 0) {
-            // If only one RS profile created, go directly to it
-            if (results.rs_profiles.length === 1) {
-              setTimeout(() => {
-                setUploading(false);
-                navigate(`/profile/${results.rs_profiles[0].id}`);
-              }, 2000);
-            } else {
-              // Multiple RS profiles created - show selection page
-              setTimeout(() => {
-                setUploading(false);
-                navigate('/', { 
-                  state: { 
-                    message: `Successfully created ${results.unique_rs_count} RS profiles. Select one to view.`,
-                    rsProfiles: results.rs_profiles 
-                  }
-                });
-              }, 2000);
-            }
-          } else {
-            throw new Error('No files were processed successfully');
-          }
-          
+
+          console.log('All state updates complete');
+
+          // Don't auto-navigate - let user click the button to proceed
+
         } catch (procError) {
+          console.error('Upload error:', procError);
           clearInterval(progressInterval);
           throw procError;
         }
-        
+
       } else {
         // Manual mode: Validate officer data first
         if (!officerData.last_name || !officerData.first_name || !officerData.service_number) {
@@ -125,75 +138,86 @@ const CreateProfilePage: React.FC = () => {
 
         // Step 1: Create officer
         const officer = await officerApi.createOfficer(officerData);
-        
+
         setProgress(10);
         setCurrentFile('Officer profile created. Processing FITREP files...');
-        
+
         // Step 2: Process files
         const startTime = Date.now();
-        
+        const estimatedTimePerFile = 8000; // 8 seconds per file
+        const totalEstimatedTime = files.length * estimatedTimePerFile;
+        setEstimatedTotal(totalEstimatedTime);
+
         const updateProgress = () => {
           const elapsed = Date.now() - startTime;
-          const expectedTime = files.length * 8000; // 8 seconds per file
-          const timeProgress = Math.min((elapsed / expectedTime) * 80, 80);
-          setProgress(10 + timeProgress);
+          const remaining = Math.max(0, totalEstimatedTime - elapsed);
+          setTimeRemaining(remaining);
+
+          // Progress from 10% to 90% during processing
+          const processingProgress = Math.min((elapsed / totalEstimatedTime) * 80, 80);
+          setProgress(10 + processingProgress);
         };
-        
-        const progressInterval = setInterval(updateProgress, 1000);
-        
+
+        const progressInterval = setInterval(updateProgress, 500);
+
         try {
           const results = await fitreportApi.processFiles(files, officer.id);
           setProcessingResults(results);
           clearInterval(progressInterval);
-          
-          setProgress(95);
-          setCurrentFile('Finalizing profile...');
-          
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          
+          setTimeRemaining(0);
+
           setProgress(100);
+          setCurrentFile('✅ Profile created successfully!');
           setProcessingComplete(true);
-          
-          if (results.successful > 0) {
-            setTimeout(() => {
-              setUploading(false);
-              navigate(`/profile/${officer.id}`);
-            }, 2000);
-          } else {
-            throw new Error('No files were processed successfully');
-          }
-          
+          setCreatedProfiles([{ id: officer.id }]);
+
+          // Don't auto-navigate - let user click the button to proceed
+
         } catch (procError) {
           clearInterval(progressInterval);
           throw procError;
         }
       }
-      
+
     } catch (err: any) {
       setError(err.response?.data?.detail || err.message || 'An error occurred during processing');
       setUploading(false);
       setProgress(0);
       setCurrentFile('');
+      setTimeRemaining(0);
     }
+  };
+
+  const formatTime = (milliseconds: number): string => {
+    const totalSeconds = Math.ceil(milliseconds / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+
+    if (minutes > 0) {
+      return `${minutes}m ${seconds}s`;
+    }
+    return `${seconds}s`;
   };
 
   if (uploading) {
     return (
       <div className="container">
         <div className="card" style={{ textAlign: 'center' }}>
-          <h2>Creating Your Profile</h2>
-          <p>Processing {files.length} FITREP files...</p>
-          
+          <h2>{processingComplete ? '✅ Upload Complete!' : 'Creating Your Profile'}</h2>
+          {!processingComplete && (
+            <p>Processing {files.length} FITREP file{files.length > 1 ? 's' : ''}...</p>
+          )}
+
           <div style={{ margin: '30px 0' }}>
-            <div style={{ 
-              width: '100%', 
-              backgroundColor: '#f0f0f0', 
-              borderRadius: '10px', 
+            <div style={{
+              width: '100%',
+              backgroundColor: '#f0f0f0',
+              borderRadius: '10px',
               overflow: 'hidden',
               marginBottom: '20px'
             }}>
-              <div style={{ 
-                width: `${progress}%`, 
+              <div style={{
+                width: `${progress}%`,
                 backgroundColor: processingComplete ? '#28a745' : '#CC0000',
                 height: '30px',
                 transition: 'width 0.3s ease',
@@ -206,58 +230,117 @@ const CreateProfilePage: React.FC = () => {
                 {Math.round(progress)}%
               </div>
             </div>
-            
-            <p>
-              {processingComplete ? 
-                '✅ Processing complete! Redirecting to your profile...' : 
-                currentFile
-              }
+
+            {/* Time estimates */}
+            {!processingComplete && estimatedTotal > 0 && (
+              <div style={{
+                fontSize: '0.95rem',
+                color: '#666',
+                marginBottom: '15px',
+                display: 'flex',
+                justifyContent: 'center',
+                gap: '30px'
+              }}>
+                <div>
+                  <strong>Estimated Total:</strong> {formatTime(estimatedTotal)}
+                </div>
+                <div>
+                  <strong>Time Remaining:</strong> {formatTime(timeRemaining)}
+                </div>
+              </div>
+            )}
+
+            <p style={{ fontSize: '1.1rem', fontWeight: processingComplete ? 'bold' : 'normal' }}>
+              {currentFile}
             </p>
-            
+
             {error && (
-              <div style={{ 
-                backgroundColor: '#f8d7da', 
-                color: '#721c24', 
-                padding: '15px', 
-                borderRadius: '5px', 
+              <div style={{
+                backgroundColor: '#f8d7da',
+                color: '#721c24',
+                padding: '15px',
+                borderRadius: '5px',
                 marginTop: '20px',
                 border: '1px solid #f5c6cb'
               }}>
                 <strong>Error:</strong> {error}
-                <button 
+                <button
                   onClick={() => {setUploading(false); setError(null);}}
-                  style={{ marginLeft: '10px', padding: '5px 10px' }}
+                  className="btn btn-secondary"
+                  style={{ marginTop: '10px' }}
                 >
                   Try Again
                 </button>
               </div>
             )}
-            
+
             {processingResults && (
               <div style={{ fontSize: '0.9rem', marginTop: '20px', textAlign: 'left' }}>
                 <h4>Processing Results:</h4>
-                <p>✅ Successfully processed: {processingResults.successful} files</p>
+                <p>✅ Successfully processed: {processingResults.successful} file{processingResults.successful !== 1 ? 's' : ''}</p>
                 {processingResults.failed > 0 && (
-                  <p>❌ Failed: {processingResults.failed} files</p>
+                  <p>⚠️ Skipped/Failed: {processingResults.failed} file{processingResults.failed !== 1 ? 's' : ''}</p>
                 )}
-                <details style={{ marginTop: '10px' }}>
-                  <summary>View Details</summary>
+                <details style={{ marginTop: '10px' }} open={processingResults.failed > 0}>
+                  <summary style={{ cursor: 'pointer', fontWeight: 'bold' }}>View Detailed Results</summary>
                   {processingResults.results.map((result, i) => (
-                    <div key={i} style={{ padding: '5px 0', fontSize: '0.8rem' }}>
-                      {result.status === 'success' ? '✅' : '❌'} {result.filename}
-                      {result.error && <span style={{ color: '#721c24' }}> - {result.error}</span>}
+                    <div key={i} style={{ padding: '5px 0', fontSize: '0.85rem', borderBottom: '1px solid #eee' }}>
+                      {result.status === 'success' ? '✅' : '⚠️'} <strong>{result.filename}</strong>
+                      {result.error && (
+                        <div style={{ color: '#856404', backgroundColor: '#fff3cd', padding: '4px 8px', marginTop: '2px', borderRadius: '3px', fontSize: '0.8rem' }}>
+                          {result.error}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </details>
               </div>
             )}
-            
-            <div style={{ fontSize: '0.9rem', color: '#666', marginTop: '20px' }}>
-              <p>📄 Extracting FITREP data from PDFs</p>
-              <p>🧮 Calculating FRA scores</p>
-              <p>📊 Computing relative values</p>
-              <p>💾 Building your profile database</p>
-            </div>
+
+            {/* Return to Home button when complete */}
+            {processingComplete && (
+              <div style={{ marginTop: '30px' }}>
+                {createdProfiles.length === 1 ? (
+                  <button
+                    onClick={() => navigate(`/profile/${createdProfiles[0].id}`)}
+                    className="btn btn-primary"
+                    style={{ fontSize: '1.1rem', padding: '15px 30px' }}
+                  >
+                    View Profile
+                  </button>
+                ) : createdProfiles.length > 1 ? (
+                  <button
+                    onClick={() => navigate('/', {
+                      state: {
+                        message: `Successfully created ${createdProfiles.length} RS profiles. Select one to view.`,
+                        rsProfiles: createdProfiles
+                      }
+                    })}
+                    className="btn btn-primary"
+                    style={{ fontSize: '1.1rem', padding: '15px 30px' }}
+                  >
+                    Select Profile to View
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => navigate('/')}
+                    className="btn btn-primary"
+                    style={{ fontSize: '1.1rem', padding: '15px 30px' }}
+                  >
+                    Return to Home
+                  </button>
+                )}
+              </div>
+            )}
+
+            {!processingComplete && (
+              <div style={{ fontSize: '0.9rem', color: '#666', marginTop: '30px' }}>
+                <p>📄 Extracting FITREP data from PDFs</p>
+                <p>🧮 Calculating FRA scores</p>
+                <p>📊 Computing relative values</p>
+                <p>💾 Building your profile database</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

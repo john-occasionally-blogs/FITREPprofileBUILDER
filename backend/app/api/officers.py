@@ -28,24 +28,27 @@ class OfficerResponse(BaseModel):
 
 @router.get("/", response_model=List[OfficerResponse])
 async def get_officers(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """Get list of all officers."""
+    """Get list of all officers with at least one FITREP."""
     officers = db.query(Officer).offset(skip).limit(limit).all()
-    
-    # Add total reports count
+
+    # Add total reports count and filter out officers with 0 reports
     officer_responses = []
     for officer in officers:
         total_reports = db.query(FitReport).filter(FitReport.officer_id == officer.id).count()
-        officer_data = OfficerResponse(
-            id=officer.id,
-            last_name=officer.last_name,
-            first_name=officer.first_name,
-            middle_initial=officer.middle_initial,
-            service_number=officer.service_number,
-            current_rank=officer.current_rank,
-            total_reports=total_reports
-        )
-        officer_responses.append(officer_data)
-    
+
+        # Only include officers with at least one report
+        if total_reports > 0:
+            officer_data = OfficerResponse(
+                id=officer.id,
+                last_name=officer.last_name,
+                first_name=officer.first_name,
+                middle_initial=officer.middle_initial,
+                service_number=officer.service_number,
+                current_rank=officer.current_rank,
+                total_reports=total_reports
+            )
+            officer_responses.append(officer_data)
+
     return officer_responses
 
 @router.get("/{officer_id}", response_model=OfficerResponse)
