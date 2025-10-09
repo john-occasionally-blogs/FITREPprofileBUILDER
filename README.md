@@ -2,6 +2,11 @@
 
 A containerized web application for analyzing Marine Corps Fitness Reports (FITREPs). This tool helps users calculate Fitness Report Averages (FRA) and Relative Values (RV), and predict the impact of new reports on officer profiles.
 
+<img width="1030" height="755" alt="Screenshot 2025-10-08 at 7 04 20 PM" src="https://github.com/user-attachments/assets/6d7bc97e-e667-437a-8e4d-ca04cdbe5a0f" />
+
+<img width="1180" height="788" alt="Screenshot 2025-10-08 at 7 04 44 PM" src="https://github.com/user-attachments/assets/2a874bbd-983b-4bfa-aa6e-09b589b28740" />
+
+
 ## Features
 
 - **Automated PDF Processing**: Upload FITREP PDFs and automatically extract data using OCR
