@@ -1000,7 +1000,11 @@ async def recalculate_all_rv(db: Session = Depends(get_db)):
 @router.delete("/all")
 async def delete_all_fitreports(db: Session = Depends(get_db)):
     """Delete ALL FITREPs across all officers."""
-    # Delete all FITREPs (cascade will handle related records)
+    # Delete related records first to avoid foreign key constraint violations
+    db.query(RelativeValue).delete()
+    db.query(TraitScore).delete()
+
+    # Delete all FITREPs
     deleted_count = db.query(FitReport).delete()
     db.commit()
 
@@ -1013,7 +1017,14 @@ async def delete_all_officer_fitreports(officer_id: int, db: Session = Depends(g
     if not officer:
         raise HTTPException(status_code=404, detail="Officer not found")
 
-    # Delete all FITREPs for this officer (cascade will handle related records)
+    # Get all FITREP IDs for this officer
+    fitrep_ids = [f.id for f in db.query(FitReport).filter(FitReport.officer_id == officer_id).all()]
+
+    # Delete related records first to avoid foreign key constraint violations
+    db.query(RelativeValue).filter(RelativeValue.fitrep_id.in_(fitrep_ids)).delete(synchronize_session=False)
+    db.query(TraitScore).filter(TraitScore.fitrep_id.in_(fitrep_ids)).delete(synchronize_session=False)
+
+    # Delete all FITREPs for this officer
     deleted_count = db.query(FitReport).filter(FitReport.officer_id == officer_id).delete()
     db.commit()
 
@@ -1026,7 +1037,11 @@ async def delete_fitrep(fitrep_id: int, db: Session = Depends(get_db)):
     if not fitrep:
         raise HTTPException(status_code=404, detail="FITREP not found")
 
-    # Delete associated trait scores and relative values (cascade should handle this)
+    # Delete related records first to avoid foreign key constraint violations
+    db.query(RelativeValue).filter(RelativeValue.fitrep_id == fitrep_id).delete()
+    db.query(TraitScore).filter(TraitScore.fitrep_id == fitrep_id).delete()
+
+    # Delete the FITREP
     db.delete(fitrep)
     db.commit()
 

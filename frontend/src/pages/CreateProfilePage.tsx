@@ -72,6 +72,8 @@ const CreateProfilePage: React.FC = () => {
           setProgress(processingProgress);
         };
 
+        // Start with initial progress
+        updateProgress();
         const progressInterval = setInterval(updateProgress, 500); // Update every 500ms for smoother progress
 
         try {
@@ -158,6 +160,8 @@ const CreateProfilePage: React.FC = () => {
           setProgress(10 + processingProgress);
         };
 
+        // Start with initial progress
+        updateProgress();
         const progressInterval = setInterval(updateProgress, 500);
 
         try {
