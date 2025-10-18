@@ -14,11 +14,11 @@ RUN apt-get update && apt-get install -y \
 COPY pdf-processor/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the root fitrep_extractor.py (single source of truth)
-COPY fitrep_extractor.py /app/app/services/fitrep_extractor.py
-
 # Copy application code
 COPY pdf-processor/ .
+
+# Copy the root fitrep_extractor.py (single source of truth) - MUST be after pdf-processor copy
+COPY fitrep_extractor.py /app/app/services/fitrep_extractor.py
 
 # Create uploads directory
 RUN mkdir -p /app/uploads
