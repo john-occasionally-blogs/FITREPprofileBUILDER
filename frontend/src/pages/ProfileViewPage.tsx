@@ -389,17 +389,40 @@ const ProfileViewPage: React.FC = () => {
               </div>
             </div>
 
-            <div style={{ marginBottom: '30px', textAlign: 'center' }}>
-              <button 
-                onClick={() => setExpandedView(!expandedView)}
-                className="btn btn-secondary"
-                style={{ marginRight: '10px' }}
-              >
-                {expandedView ? '📊 Summary View' : '🔍 Expanded Trait View'}
-              </button>
-              <span style={{ color: '#666', fontSize: '0.9rem' }}>
-                {expandedView ? 'Switch to condensed view' : 'Show all 14 trait scores for comparison'}
-              </span>
+            <div style={{ marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ textAlign: 'center', flex: 1 }}>
+                <button
+                  onClick={() => setExpandedView(!expandedView)}
+                  className="btn btn-secondary"
+                  style={{ marginRight: '10px' }}
+                >
+                  {expandedView ? '📊 Summary View' : '🔍 Expanded Trait View'}
+                </button>
+                <span style={{ color: '#666', fontSize: '0.9rem' }}>
+                  {expandedView ? 'Switch to condensed view' : 'Show all 14 trait scores for comparison'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  onClick={() => setShowWhatIfModal(true)}
+                  className="btn btn-success"
+                  style={{ fontSize: '14px' }}
+                >
+                  + Add Potential Reports
+                </button>
+                {hypotheticalReports.length > 0 && (
+                  <button
+                    onClick={() => {
+                      setHypotheticalReports([]);
+                      setWhatIfResults(null);
+                    }}
+                    className="btn btn-warning"
+                    style={{ fontSize: '14px' }}
+                  >
+                    Clear What-If
+                  </button>
+                )}
+              </div>
             </div>
 
 {expandedView ? (
@@ -485,9 +508,9 @@ const ProfileViewPage: React.FC = () => {
                     <h3>Spreadsheet View - All {selectedRank} Reports</h3>
                     <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                       <label style={{ fontSize: '14px' }}>
-                        Sort by: 
-                        <select 
-                          value={sortBy} 
+                        Sort by:
+                        <select
+                          value={sortBy}
                           onChange={(e) => setSortBy(e.target.value as 'date' | 'rv')}
                           style={{ marginLeft: '5px', padding: '4px 8px' }}
                         >
@@ -495,26 +518,7 @@ const ProfileViewPage: React.FC = () => {
                           <option value="rv">Relative Value</option>
                         </select>
                       </label>
-                      <button 
-                        onClick={() => setShowWhatIfModal(true)}
-                        className="btn btn-success"
-                        style={{ fontSize: '14px', marginRight: '10px' }}
-                      >
-                        + Add Potential Reports
-                      </button>
-                      {hypotheticalReports.length > 0 && (
-                        <button 
-                          onClick={() => {
-                            setHypotheticalReports([]);
-                            setWhatIfResults(null);
-                          }}
-                          className="btn btn-warning"
-                          style={{ fontSize: '14px' }}
-                        >
-                          Clear What-If
-                        </button>
-                      )}
-                      
+
                       <div style={{ borderLeft: '1px solid #ddd', paddingLeft: '10px', marginLeft: '10px', display: 'flex', gap: '5px' }}>
                         <button
                           onClick={() => {
