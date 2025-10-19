@@ -960,7 +960,7 @@ const ProfileViewPage: React.FC = () => {
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={async () => {
                   if (hypotheticalReports.length === 0) {
                     setShowWhatIfModal(false);
@@ -969,23 +969,17 @@ const ProfileViewPage: React.FC = () => {
 
                   setIsCalculating(true);
                   try {
-                    // Get the RS name from profileData and format it to match database format
-                    // Database stores as "LAST, FIRST" but profile returns "LAST, FIRST MIDDLE"
-                    let rsName = profileData?.officer_info.name || '';
-                    if (rsName) {
-                      // Convert "LAST, FIRST MIDDLE" to "LAST, FIRST" 
-                      const parts = rsName.split(', ');
-                      if (parts.length >= 2) {
-                        const lastName = parts[0];
-                        const firstAndMiddle = parts[1].split(' ');
-                        const firstName = firstAndMiddle[0];
-                        rsName = `${lastName}, ${firstName}`;
-                      }
-                    }
-                    
+                    // Get the RS name from profileData - use the exact format from the database
+                    // The officer_info.name should already be in the correct format
+                    const rsName = profileData?.officer_info.name || '';
+
+                    console.log('DEBUG: Sending predict-impact request with RS:', rsName, 'Rank:', selectedRank);
+
                     // Convert hypothetical reports to the format expected by the API
                     const proposedReports = hypotheticalReports.map(report => report.traitScores);
-                    
+
+                    console.log('DEBUG: Proposed reports count:', proposedReports.length);
+
                     // Call the predict impact API
                     const impactResult = await scoringApi.predictImpact({
                       officer_id: parseInt(officerId || '1'),
@@ -993,14 +987,17 @@ const ProfileViewPage: React.FC = () => {
                       reporting_senior: rsName,
                       proposed_reports: proposedReports
                     });
-                    
+
                     console.log('DEBUG: What-if results received:', impactResult);
                     console.log('DEBUG: Updated existing reports:', impactResult.updated_existing_reports);
+                    console.log('DEBUG: New reports:', impactResult.new_reports);
                     setWhatIfResults(impactResult);
                     setShowWhatIfModal(false);
+                    // Automatically switch to expanded view to show the hypothetical reports
+                    setExpandedView(true);
                   } catch (error) {
                     console.error('Error calculating what-if scenario:', error);
-                    alert('Error calculating what-if scenario. Please try again.');
+                    alert(`Error calculating what-if scenario: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
                   } finally {
                     setIsCalculating(false);
                   }
