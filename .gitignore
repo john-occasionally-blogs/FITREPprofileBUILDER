@@ -125,7 +125,11 @@ frontend/build/
 
 # Sensitive data files
 *.pdf
-*.csvfitrep.db
+*.csv
 *.db
-*.pdf
 *.png
+*.dmg
+*.DMG
+
+# Lock files in root (frontend has its own)
+/package-lock.json
