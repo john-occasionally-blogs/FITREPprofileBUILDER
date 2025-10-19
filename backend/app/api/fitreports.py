@@ -3,11 +3,15 @@ from sqlalchemy.orm import Session
 from app.models.database import get_db
 from app.models.models import Officer, FitReport, TraitScore, RelativeValue
 from app.utils.scoring import calculate_fra_score, calculate_relative_values, TRAIT_NAMES
+from app.utils.rs_list_parser import parse_rs_list_pdf, generate_trait_scores_from_fra, generate_dummy_fitrep_id
 from typing import List, Optional, Dict
 from pydantic import BaseModel
 import httpx
 import os
 from datetime import datetime
+from decimal import Decimal
+import tempfile
+import shutil
 
 router = APIRouter()
 
@@ -996,6 +1000,175 @@ async def recalculate_all_rv(db: Session = Depends(get_db)):
         return {"message": "Successfully recalculated all relative values"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error recalculating RV values: {str(e)}")
+
+@router.post("/import-rs-list")
+async def import_rs_list(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Import FITREPs from a Reporting Senior's List PDF.
+
+    This creates a complete profile from the standardized RS list format,
+    generating synthetic trait scores that match the documented FRA values.
+    """
+    if not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="File must be a PDF")
+
+    try:
+        # Save uploaded file temporarily
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+            shutil.copyfileobj(file.file, tmp_file)
+            tmp_file_path = tmp_file.name
+
+        # Parse the RS list PDF
+        rs_data = parse_rs_list_pdf(tmp_file_path)
+
+        # Clean up temp file
+        os.unlink(tmp_file_path)
+
+        # Create or get Reporting Senior officer record
+        rs_name = rs_data['rs_name']
+        rs_rank = rs_data['rs_rank']
+        rs_dod_id = rs_data['rs_dod_id']
+
+        # Parse name (e.g., "JANE A SMITH" -> first: JANE, middle: A, last: SMITH)
+        name_parts = rs_name.strip().split()
+
+        if len(name_parts) >= 3:
+            first_name = name_parts[0]
+            middle_initial = name_parts[1][0] if len(name_parts[1]) == 1 else None
+            last_name = ' '.join(name_parts[2:] if middle_initial else name_parts[1:])
+        elif len(name_parts) == 2:
+            first_name = name_parts[0]
+            last_name = name_parts[1]
+            middle_initial = None
+        else:
+            first_name = "UNKNOWN"
+            last_name = rs_name
+            middle_initial = None
+
+        # Check if RS already exists
+        existing_rs = None
+        if rs_dod_id:
+            existing_rs = db.query(Officer).filter(Officer.service_number == rs_dod_id).first()
+
+        if existing_rs:
+            officer_id = existing_rs.id
+            # Update names from parsed data in case they differ
+            first_name = existing_rs.first_name
+            last_name = existing_rs.last_name
+            print(f"Found existing RS: {existing_rs.last_name} (ID: {officer_id})")
+        else:
+            # Create new RS officer
+            rs_officer = Officer(
+                service_number=rs_dod_id or f"AUTO_{int(datetime.now().timestamp())}",
+                first_name=first_name,
+                middle_initial=middle_initial,
+                last_name=last_name,
+                current_rank=rs_rank
+            )
+            db.add(rs_officer)
+            db.commit()
+            db.refresh(rs_officer)
+            officer_id = rs_officer.id
+            print(f"Created new RS: {last_name} (ID: {officer_id})")
+
+        # Process each FITREP from the list
+        imported_count = 0
+        skipped_count = 0
+        skipped_reasons = []
+
+        for fitrep_data in rs_data['fitreports']:
+            try:
+                # Skip if no FRA score (N/A or missing)
+                if not fitrep_data['fra']:
+                    skipped_count += 1
+                    skipped_reasons.append(f"{fitrep_data['last_name']} ({fitrep_data['from_date']} to {fitrep_data['to_date']}): No FRA score")
+                    continue
+
+                # Skip EN occasion reports
+                if fitrep_data['occasion'] and fitrep_data['occasion'].upper() == 'EN':
+                    skipped_count += 1
+                    skipped_reasons.append(f"{fitrep_data['last_name']} ({fitrep_data['from_date']} to {fitrep_data['to_date']}): EN report (excluded from RV)")
+                    continue
+
+                # Generate dummy FITREP ID
+                fitrep_id = generate_dummy_fitrep_id(
+                    fitrep_data['edipi'],
+                    fitrep_data['from_date'],
+                    fitrep_data['to_date']
+                )
+
+                # Check for duplicates
+                existing_fitrep = db.query(FitReport).filter(
+                    FitReport.officer_id == officer_id,
+                    FitReport.fitrep_id == str(fitrep_id)
+                ).first()
+
+                if existing_fitrep:
+                    skipped_count += 1
+                    skipped_reasons.append(f"{fitrep_data['last_name']} ({fitrep_data['from_date']} to {fitrep_data['to_date']}): Duplicate")
+                    continue
+
+                # Generate synthetic trait scores that match the FRA
+                trait_scores = generate_trait_scores_from_fra(fitrep_data['fra'])
+
+                # Create FITREP record
+                fitrep = FitReport(
+                    officer_id=officer_id,
+                    fitrep_id=str(fitrep_id),
+                    period_from=datetime.strptime(fitrep_data['from_date'], '%Y-%m-%d').date(),
+                    period_to=datetime.strptime(fitrep_data['to_date'], '%Y-%m-%d').date(),
+                    report_date=datetime.strptime(fitrep_data['to_date'], '%Y-%m-%d').date(),
+                    rank_at_time=fitrep_data['grade'],
+                    occasion_type=fitrep_data['occasion'] or 'AN',
+                    fra_score=float(fitrep_data['fra']),
+                    reporting_senior_name=f"{last_name}, {first_name}",
+                    organization=f"Marine: {fitrep_data['last_name']} (EDIPI: {fitrep_data['edipi']})"
+                )
+
+                db.add(fitrep)
+                db.commit()
+                db.refresh(fitrep)
+
+                # Save trait scores
+                for i, (trait_name, letter_grade) in enumerate(trait_scores.items(), 1):
+                    trait_score = TraitScore(
+                        fitrep_id=fitrep.id,
+                        trait_name=trait_name,
+                        trait_order=i,
+                        score_letter=letter_grade,
+                        score_numeric=None if letter_grade == 'H' else ord(letter_grade) - ord('A') + 1
+                    )
+                    db.add(trait_score)
+
+                db.commit()
+                imported_count += 1
+
+            except Exception as e:
+                skipped_count += 1
+                skipped_reasons.append(f"{fitrep_data['last_name']} ({fitrep_data['from_date']} to {fitrep_data['to_date']}): Error - {str(e)}")
+                continue
+
+        # Recalculate relative values
+        await _recalculate_relative_values(officer_id, db)
+
+        return {
+            "message": f"Successfully imported {imported_count} FITREPs for {last_name}",
+            "officer_id": officer_id,
+            "officer_name": f"{last_name}, {first_name}",
+            "total_in_list": len(rs_data['fitreports']),
+            "imported": imported_count,
+            "skipped": skipped_count,
+            "skipped_reasons": skipped_reasons[:10]  # Limit to first 10 for display
+        }
+
+    except Exception as e:
+        import traceback
+        error_details = f"{str(e)} | Traceback: {traceback.format_exc()}"
+        print(f"RS LIST IMPORT ERROR: {error_details}")
+        raise HTTPException(status_code=500, detail=f"Error importing RS list: {str(e)}")
 
 @router.delete("/all")
 async def delete_all_fitreports(db: Session = Depends(get_db)):
