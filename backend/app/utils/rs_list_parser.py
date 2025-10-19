@@ -78,36 +78,74 @@ def _extract_fitrep_table(text: str) -> List[Dict]:
     """
     Extract FITREP records from the table portion of the PDF.
 
-    Table format:
-    Edipi Grade Last Name From Date To Date Occ Fitrep Average
+    The PDF is formatted with each field on its own line in sequence:
+    EDIPI
+    Grade
+    Last Name
+    From Date (YYYY MM DD)
+    To Date (YYYY MM DD)
+    Occ
+    Fitrep Average
     """
     fitreports = []
 
-    # Split into lines
-    lines = text.split('\n')
+    # Split into lines and clean
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
 
-    # Find lines that match the FITREP data pattern
-    # Pattern: EDIPI (10 digits) Grade LastName FromDate ToDate [Occ] [FRA]
-    fitrep_pattern = re.compile(
-        r'(\d{10})\s+'  # EDIPI
-        r'(MAJ|CAPT|1STLT|2NDLT|MSGT|GYSGT|SSGT|SGT|MGYSGT|1STSGT|SGTMAJ|CWO\d|WO|COL|LTCOL|GEN|LTGEN|MAJGEN|BGEN)\s+'  # Grade
-        r'([A-Z\s]+?)\s+'  # Last Name (can have spaces like "JACKSON III")
-        r'(\d{4})\s+(\d{2})\s+(\d{2})\s+'  # From Date (YYYY MM DD)
-        r'(\d{4})\s+(\d{2})\s+(\d{2})\s*'  # To Date (YYYY MM DD)
-        r'([A-Z]{2,3})?\s*'  # Occasion code (optional, e.g., AN, TR, CH)
-        r'(\d+\.\d+|N/A)?'  # FRA (optional, e.g., 3.79 or N/A)
-    )
+    # Find the start of the table data (after the header row)
+    start_idx = None
+    for i, line in enumerate(lines):
+        if 'Fitrep Average' in line:
+            start_idx = i + 1
+            break
 
-    for line in lines:
-        match = fitrep_pattern.search(line)
-        if match:
-            edipi = match.group(1)
-            grade = match.group(2)
-            last_name = match.group(3).strip()
-            from_year, from_month, from_day = match.group(4), match.group(5), match.group(6)
-            to_year, to_month, to_day = match.group(7), match.group(8), match.group(9)
-            occasion = match.group(10) if match.group(10) else None
-            fra_str = match.group(11) if match.group(11) else None
+    if start_idx is None:
+        return fitreports
+
+    # Process lines in groups of 7 (edipi, grade, name, from_date, to_date, occ, fra)
+    i = start_idx
+    while i < len(lines):
+        # Skip "Average By MRO Grade:" lines
+        if 'Average' in lines[i] and 'Grade' in lines[i]:
+            i += 2  # Skip the average line and its value
+            continue
+
+        # Need at least 7 lines for a complete record
+        if i + 6 >= len(lines):
+            break
+
+        try:
+            edipi = lines[i].strip()
+            grade = lines[i + 1].strip()
+            last_name = lines[i + 2].strip()
+            from_date_raw = lines[i + 3].strip()
+            to_date_raw = lines[i + 4].strip()
+            occasion = lines[i + 5].strip()
+            fra_str = lines[i + 6].strip()
+
+            # Validate EDIPI (should be 10 digits)
+            if not re.match(r'^\d{10}$', edipi):
+                i += 1
+                continue
+
+            # Validate grade
+            valid_grades = ['MAJ', 'CAPT', '1STLT', '2NDLT', 'MSGT', 'GYSGT', 'SSGT', 'SGT',
+                           'MGYSGT', '1STSGT', 'SGTMAJ', 'CWO2', 'CWO3', 'CWO4', 'CWO5',
+                           'WO', 'COL', 'LTCOL', 'GEN', 'LTGEN', 'MAJGEN', 'BGEN']
+            if grade not in valid_grades:
+                i += 1
+                continue
+
+            # Parse dates (format: "YYYY MM DD")
+            from_parts = from_date_raw.split()
+            to_parts = to_date_raw.split()
+
+            if len(from_parts) != 3 or len(to_parts) != 3:
+                i += 7
+                continue
+
+            from_date = f"{from_parts[0]}-{from_parts[1]}-{from_parts[2]}"
+            to_date = f"{to_parts[0]}-{to_parts[1]}-{to_parts[2]}"
 
             # Parse FRA
             fra = None
@@ -117,19 +155,23 @@ def _extract_fitrep_table(text: str) -> List[Dict]:
                 except:
                     fra = None
 
-            # Format dates
-            from_date = f"{from_year}-{from_month}-{from_day}"
-            to_date = f"{to_year}-{to_month}-{to_day}"
-
             fitreports.append({
                 "edipi": edipi,
                 "grade": grade,
                 "last_name": last_name,
                 "from_date": from_date,
                 "to_date": to_date,
-                "occasion": occasion,
+                "occasion": occasion if occasion != 'N/A' else None,
                 "fra": fra
             })
+
+            # Move to next record (7 lines forward)
+            i += 7
+
+        except (IndexError, ValueError) as e:
+            # Skip this record and try next line
+            i += 1
+            continue
 
     return fitreports
 
