@@ -122,6 +122,28 @@ export const fitreportApi = {
     const response = await apiClient.delete(`/fitreports/officer/${officerId}/all`);
     return response.data;
   },
+
+  importRsList: async (file: File): Promise<{
+    message: string;
+    officer_id: number;
+    officer_name: string;
+    total_in_list: number;
+    imported: number;
+    skipped: number;
+    skipped_reasons: string[];
+  }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await apiClient.post('/fitreports/import-rs-list', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 120000, // 2 minutes for RS list processing
+    });
+
+    return response.data;
+  },
 };
 
 export const scoringApi = {

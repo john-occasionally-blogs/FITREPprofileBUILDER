@@ -1056,9 +1056,12 @@ async def import_rs_list(
         if existing_rs:
             officer_id = existing_rs.id
             # Update names from parsed data in case they differ
-            first_name = existing_rs.first_name
-            last_name = existing_rs.last_name
-            print(f"Found existing RS: {existing_rs.last_name} (ID: {officer_id})")
+            existing_rs.first_name = first_name
+            existing_rs.last_name = last_name
+            existing_rs.middle_initial = middle_initial
+            existing_rs.current_rank = rs_rank
+            db.commit()
+            print(f"Updated existing RS: {last_name} (ID: {officer_id})")
         else:
             # Create new RS officer
             rs_officer = Officer(

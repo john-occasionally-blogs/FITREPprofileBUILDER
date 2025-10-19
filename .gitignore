@@ -133,3 +133,7 @@ frontend/build/
 
 # Lock files in root (frontend has its own)
 /package-lock.json
+
+# Test scripts (may contain personal paths)
+test_rs_parser.py
+test_*.py

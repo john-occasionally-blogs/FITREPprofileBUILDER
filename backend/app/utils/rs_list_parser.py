@@ -54,7 +54,8 @@ def parse_rs_list_pdf(pdf_path: str) -> Dict:
 def _extract_rs_info(text: str) -> Dict:
     """Extract Reporting Senior information from PDF header."""
     # Extract rank and name (e.g., "LTCOL JANE A SMITH")
-    name_match = re.search(r'(LTCOL|COL|MAJ|CAPT|1STLT|2NDLT|GEN|LTGEN|MAJGEN|BGEN)\s+([A-Z\s]+)', text)
+    # Stop at "DOD ID:" to avoid capturing it
+    name_match = re.search(r'(LTCOL|COL|MAJ|CAPT|1STLT|2NDLT|GEN|LTGEN|MAJGEN|BGEN)\s+([A-Z\s]+?)(?=\s*DOD ID:)', text)
     rank = name_match.group(1) if name_match else "UNKNOWN"
     name = name_match.group(2).strip() if name_match else "UNKNOWN"
 

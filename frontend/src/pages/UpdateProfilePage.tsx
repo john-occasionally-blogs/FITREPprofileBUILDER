@@ -1,31 +1,48 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDropzone } from 'react-dropzone';
-import { ProfileSummary } from '../types';
+import { officerApi, fitreportApi } from '../services/api';
+
+interface RSSummary {
+  rs_name: string;
+  rs_edipi: string;
+  total_reports: number;
+}
 
 const UpdateProfilePage: React.FC = () => {
   const { officerId } = useParams<{ officerId: string }>();
   const navigate = useNavigate();
-  const [profileSummary, setProfileSummary] = useState<ProfileSummary | null>(null);
+  const [rsSummary, setRsSummary] = useState<RSSummary | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentFile, setCurrentFile] = useState('');
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [uploadMode, setUploadMode] = useState<'individual' | 'summary'>('individual');
+  const [error, setError] = useState<string | null>(null);
+  const [timeRemaining, setTimeRemaining] = useState<number>(0);
+  const [estimatedTotal, setEstimatedTotal] = useState<number>(0);
 
   useEffect(() => {
-    // Mock profile data - replace with API call
-    const mockProfile: ProfileSummary = {
-      officer_name: "SMITH, JOHN A",
-      current_rank: "CAPT",
-      total_reports: 15,
-      latest_fra: 3.6,
-      latest_rv: 95
+    const fetchOfficerData = async () => {
+      try {
+        const officers = await officerApi.getOfficers();
+        const officer = officers.find((o: any) => o.id === parseInt(officerId || '0'));
+
+        if (officer) {
+          setRsSummary({
+            rs_name: `${officer.last_name}, ${officer.first_name}`,
+            rs_edipi: officer.service_number,
+            total_reports: officer.total_reports || 0
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching officer data:', error);
+        setError('Failed to load officer profile');
+      }
     };
-    
-    setTimeout(() => {
-      setProfileSummary(mockProfile);
-    }, 500);
+
+    fetchOfficerData();
   }, [officerId]);
 
   const onDrop = (acceptedFiles: File[]) => {
@@ -38,7 +55,7 @@ const UpdateProfilePage: React.FC = () => {
     accept: {
       'application/pdf': ['.pdf']
     },
-    multiple: true
+    multiple: uploadMode !== 'summary' // Summary mode accepts only 1 file
   });
 
   const removeFile = (index: number) => {
@@ -60,41 +77,129 @@ const UpdateProfilePage: React.FC = () => {
 
     setUploading(true);
     setProgress(0);
+    setError(null);
 
-    // Simulate file processing
-    for (let i = 0; i < files.length; i++) {
-      setCurrentFile(files[i].name);
-      setProgress((i / files.length) * 100);
-      
-      // Simulate processing time
-      await new Promise(resolve => setTimeout(resolve, 2000));
-    }
+    try {
+      if (uploadMode === 'summary') {
+        // RS Summary mode
+        if (files.length !== 1) {
+          setError('Please upload exactly one RS summary list PDF');
+          setUploading(false);
+          return;
+        }
 
-    setProgress(100);
-    
-    // Simulate completion delay
-    setTimeout(() => {
+        setCurrentFile('📋 Importing RS summary list...');
+        const startTime = Date.now();
+        const estimatedTime = 15000;
+        setEstimatedTotal(estimatedTime);
+
+        const updateProgress = () => {
+          const elapsed = Date.now() - startTime;
+          const remaining = Math.max(0, estimatedTime - elapsed);
+          setTimeRemaining(remaining);
+          const processingProgress = Math.min((elapsed / estimatedTime) * 90, 90);
+          setProgress(processingProgress);
+        };
+
+        updateProgress();
+        const progressInterval = setInterval(updateProgress, 500);
+
+        try {
+          await fitreportApi.importRsList(files[0]);
+          clearInterval(progressInterval);
+          setProgress(100);
+          setCurrentFile('✅ RS summary imported successfully!');
+          setTimeout(() => {
+            setUploading(false);
+            navigate(`/profile/${officerId}`);
+          }, 1500);
+        } catch (err) {
+          clearInterval(progressInterval);
+          throw err;
+        }
+      } else {
+        // Individual FITREP mode
+        setCurrentFile('🔍 Processing individual FITREPs...');
+        const startTime = Date.now();
+        const estimatedTimePerFile = 9000;
+        const totalEstimatedTime = files.length * estimatedTimePerFile;
+        setEstimatedTotal(totalEstimatedTime);
+
+        const updateProgress = () => {
+          const elapsed = Date.now() - startTime;
+          const remaining = Math.max(0, totalEstimatedTime - elapsed);
+          setTimeRemaining(remaining);
+          const processingProgress = Math.min((elapsed / totalEstimatedTime) * 90, 90);
+          setProgress(processingProgress);
+        };
+
+        updateProgress();
+        const progressInterval = setInterval(updateProgress, 500);
+
+        try {
+          await fitreportApi.multiRsUpload(files);
+          clearInterval(progressInterval);
+          setProgress(100);
+          setCurrentFile('✅ FITREPs processed successfully!');
+          setTimeout(() => {
+            setUploading(false);
+            navigate(`/profile/${officerId}`);
+          }, 1500);
+        } catch (err) {
+          clearInterval(progressInterval);
+          throw err;
+        }
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.detail || err.message || 'An error occurred during upload');
       setUploading(false);
-      navigate(`/profile/${officerId}`);
-    }, 2000);
+      setProgress(0);
+      setCurrentFile('');
+      setTimeRemaining(0);
+    }
+  };
+
+  const formatTime = (milliseconds: number): string => {
+    const totalSeconds = Math.ceil(milliseconds / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+
+    if (minutes > 0) {
+      return `${minutes}m ${seconds}s`;
+    }
+    return `${seconds}s`;
   };
 
   const handleProceed = () => {
-    if (!profileSummary) return;
+    if (!rsSummary) return;
     setShowConfirmation(true);
   };
 
-  if (!profileSummary) {
+  if (!rsSummary && !error) {
     return (
       <div className="container">
         <div className="card">
-          <p>Loading profile...</p>
+          <p>Loading RS profile...</p>
         </div>
       </div>
     );
   }
 
-  if (showConfirmation) {
+  if (error && !rsSummary) {
+    return (
+      <div className="container">
+        <div className="card">
+          <h2>Error Loading Profile</h2>
+          <p style={{ color: '#721c24' }}>{error}</p>
+          <button onClick={() => navigate('/')} className="btn btn-secondary">
+            Return Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (showConfirmation && rsSummary) {
     return (
       <div className="container">
         <div className="card" style={{ textAlign: 'center' }}>
@@ -102,38 +207,30 @@ const UpdateProfilePage: React.FC = () => {
           <p style={{ marginBottom: '30px' }}>
             Is this the profile you would like to update?
           </p>
-          
+
           <div className="card" style={{ backgroundColor: '#f8f9fa', marginBottom: '30px' }}>
-            <h3>{profileSummary.officer_name}</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px', marginTop: '20px' }}>
+            <h3>{rsSummary.rs_name}</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginTop: '20px' }}>
               <div>
-                <strong>Current Rank</strong>
-                <p>{profileSummary.current_rank}</p>
+                <strong>RS EDIPI</strong>
+                <p>{rsSummary.rs_edipi}</p>
               </div>
               <div>
                 <strong>Total Reports</strong>
-                <p>{profileSummary.total_reports}</p>
-              </div>
-              <div>
-                <strong>Latest FRA</strong>
-                <p>{profileSummary.latest_fra.toFixed(2)}</p>
-              </div>
-              <div>
-                <strong>Latest RV</strong>
-                <p>{profileSummary.latest_rv}</p>
+                <p>{rsSummary.total_reports}</p>
               </div>
             </div>
           </div>
-          
+
           <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
-            <button 
+            <button
               onClick={handleConfirmProfile}
               className="btn btn-primary"
               style={{ fontSize: '1.1rem', padding: '15px 30px' }}
             >
               Yes, Update This Profile
             </button>
-            <button 
+            <button
               onClick={handleRejectProfile}
               className="btn btn-secondary"
               style={{ fontSize: '1.1rem', padding: '15px 30px' }}
@@ -151,18 +248,18 @@ const UpdateProfilePage: React.FC = () => {
       <div className="container">
         <div className="card" style={{ textAlign: 'center' }}>
           <h2>Updating Profile</h2>
-          <p>Processing {files.length} additional FITREP files...</p>
-          
+          <p>Processing {files.length} additional file{files.length > 1 ? 's' : ''}...</p>
+
           <div style={{ margin: '30px 0' }}>
-            <div style={{ 
-              width: '100%', 
-              backgroundColor: '#f0f0f0', 
-              borderRadius: '10px', 
+            <div style={{
+              width: '100%',
+              backgroundColor: '#f0f0f0',
+              borderRadius: '10px',
               overflow: 'hidden',
               marginBottom: '20px'
             }}>
-              <div style={{ 
-                width: `${progress}%`, 
+              <div style={{
+                width: `${progress}%`,
                 backgroundColor: progress === 100 ? '#28a745' : '#CC0000',
                 height: '30px',
                 transition: 'width 0.3s ease',
@@ -175,18 +272,35 @@ const UpdateProfilePage: React.FC = () => {
                 {Math.round(progress)}%
               </div>
             </div>
-            
-            <p>
-              {progress === 100 ? 
-                '✅ Update complete! Redirecting to your updated profile...' : 
-                `Processing: ${currentFile}`
-              }
+
+            {timeRemaining > 0 && (
+              <p style={{ fontSize: '0.9rem', color: '#666', marginBottom: '10px' }}>
+                Time remaining: {formatTime(timeRemaining)}
+              </p>
+            )}
+
+            <p style={{ fontSize: '1.1rem' }}>
+              {currentFile}
             </p>
+
+            {error && (
+              <div style={{
+                backgroundColor: '#f8d7da',
+                color: '#721c24',
+                padding: '15px',
+                borderRadius: '5px',
+                marginTop: '20px'
+              }}>
+                <strong>Error:</strong> {error}
+              </div>
+            )}
           </div>
         </div>
       </div>
     );
   }
+
+  if (!rsSummary) return null;
 
   return (
     <div className="container">
@@ -194,10 +308,10 @@ const UpdateProfilePage: React.FC = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <div>
             <h2>Update Profile</h2>
-            <p>Add additional FITREP files to: <strong>{profileSummary.officer_name}</strong></p>
+            <p>Add additional FITREP files to: <strong>{rsSummary.rs_name}</strong></p>
           </div>
-          <button 
-            onClick={() => navigate(`/profile/${officerId}`)} 
+          <button
+            onClick={() => navigate(`/profile/${officerId}`)}
             className="btn btn-secondary"
           >
             Back to Profile
@@ -206,29 +320,79 @@ const UpdateProfilePage: React.FC = () => {
       </div>
 
       <div className="card" style={{ backgroundColor: '#f8f9fa' }}>
-        <h3>Current Profile Summary</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '20px', marginTop: '15px' }}>
+        <h3>Current RS Profile</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginTop: '15px' }}>
           <div style={{ textAlign: 'center' }}>
-            <strong>Current Rank</strong>
-            <p style={{ fontSize: '1.5rem', color: '#003366', margin: '5px 0' }}>{profileSummary.current_rank}</p>
+            <strong>RS Name</strong>
+            <p style={{ fontSize: '1.3rem', color: '#003366', margin: '5px 0' }}>{rsSummary.rs_name}</p>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <strong>RS EDIPI</strong>
+            <p style={{ fontSize: '1.3rem', color: '#003366', margin: '5px 0' }}>{rsSummary.rs_edipi}</p>
           </div>
           <div style={{ textAlign: 'center' }}>
             <strong>Total Reports</strong>
-            <p style={{ fontSize: '1.5rem', color: '#003366', margin: '5px 0' }}>{profileSummary.total_reports}</p>
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <strong>Latest FRA</strong>
-            <p style={{ fontSize: '1.5rem', color: '#CC0000', margin: '5px 0' }}>{profileSummary.latest_fra.toFixed(2)}</p>
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <strong>Latest RV</strong>
-            <p style={{ fontSize: '1.5rem', color: '#FFD700', margin: '5px 0' }}>{profileSummary.latest_rv}</p>
+            <p style={{ fontSize: '1.3rem', color: '#CC0000', margin: '5px 0' }}>{rsSummary.total_reports}</p>
           </div>
         </div>
       </div>
 
       <div className="card">
-        <h3>Add Additional FITREP Files</h3>
+        <h3>🚀 Choose Upload Method</h3>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px', marginBottom: '30px' }}>
+          <div
+            style={{
+              padding: '20px',
+              border: uploadMode === 'individual' ? '3px solid #28a745' : '2px solid #ddd',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              backgroundColor: uploadMode === 'individual' ? '#e8f5e8' : '#f8f9fa',
+              transition: 'all 0.3s ease'
+            }}
+            onClick={() => setUploadMode('individual')}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
+              <input
+                type="radio"
+                checked={uploadMode === 'individual'}
+                onChange={() => setUploadMode('individual')}
+                style={{ marginRight: '10px' }}
+              />
+              <h4 style={{ margin: 0, color: '#28a745' }}>📄 Individual FITREPs</h4>
+            </div>
+            <p style={{ margin: 0, fontSize: '0.95rem' }}>
+              Upload individual FITREP PDFs with full trait scores.
+            </p>
+          </div>
+
+          <div
+            style={{
+              padding: '20px',
+              border: uploadMode === 'summary' ? '3px solid #0066cc' : '2px solid #ddd',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              backgroundColor: uploadMode === 'summary' ? '#e6f2ff' : '#f8f9fa',
+              transition: 'all 0.3s ease'
+            }}
+            onClick={() => setUploadMode('summary')}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
+              <input
+                type="radio"
+                checked={uploadMode === 'summary'}
+                onChange={() => setUploadMode('summary')}
+                style={{ marginRight: '10px' }}
+              />
+              <h4 style={{ margin: 0, color: '#0066cc' }}>📋 RS Summary List</h4>
+            </div>
+            <p style={{ margin: 0, fontSize: '0.95rem' }}>
+              Upload RS summary PDF (synthetic traits, placeholder IDs).
+            </p>
+          </div>
+        </div>
+
+        <h3>Upload Additional FITREP Files</h3>
         
         <div 
           {...getRootProps()} 

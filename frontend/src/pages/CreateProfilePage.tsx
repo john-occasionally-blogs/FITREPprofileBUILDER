@@ -13,7 +13,7 @@ const CreateProfilePage: React.FC = () => {
   const [processingComplete, setProcessingComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [processingResults, setProcessingResults] = useState<BatchProcessingResult | null>(null);
-  const [uploadMode, setUploadMode] = useState<'auto' | 'manual'>('auto');
+  const [uploadMode, setUploadMode] = useState<'individual' | 'summary' | 'manual'>('individual');
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
   const [estimatedTotal, setEstimatedTotal] = useState<number>(0);
   const [createdProfiles, setCreatedProfiles] = useState<any[]>([]);
@@ -35,7 +35,7 @@ const CreateProfilePage: React.FC = () => {
     accept: {
       'application/pdf': ['.pdf']
     },
-    multiple: true
+    multiple: uploadMode !== 'summary' // Summary mode accepts only 1 file
   });
 
   const removeFile = (index: number) => {
@@ -52,10 +52,72 @@ const CreateProfilePage: React.FC = () => {
     setProcessingComplete(false);
 
     try {
-      if (uploadMode === 'auto') {
-        // Auto mode: Extract everything from PDFs
-        console.log('[AUTO MODE] Starting auto upload');
-        setCurrentFile('🔍 Extracting officer info from PDF...');
+      if (uploadMode === 'summary') {
+        // RS Summary mode: Import from Reporting Senior's summary list
+        console.log('[SUMMARY MODE] Starting RS list import');
+        setCurrentFile('📋 Importing RS summary list...');
+
+        if (files.length !== 1) {
+          setError('Please upload exactly one RS summary list PDF');
+          setUploading(false);
+          return;
+        }
+
+        const startTime = Date.now();
+        const estimatedTimePerFile = 15000; // 15 seconds for summary processing
+        setEstimatedTotal(estimatedTimePerFile);
+
+        const updateProgress = () => {
+          const elapsed = Date.now() - startTime;
+          const remaining = Math.max(0, estimatedTimePerFile - elapsed);
+          setTimeRemaining(remaining);
+          const processingProgress = Math.min((elapsed / estimatedTimePerFile) * 90, 90);
+          setProgress(processingProgress);
+        };
+
+        updateProgress();
+        const progressInterval = setInterval(updateProgress, 500);
+
+        try {
+          const results = await fitreportApi.importRsList(files[0]);
+          console.log('RS list import complete, results:', results);
+
+          clearInterval(progressInterval);
+          setTimeRemaining(0);
+
+          setProcessingResults({
+            total_files: 1,
+            successful: 1,
+            failed: 0,
+            results: [{
+              filename: files[0].name,
+              status: 'success' as const,
+              fitrep_id: 'rs_summary',
+              fra_score: undefined
+            }]
+          });
+
+          setCreatedProfiles([{
+            id: results.officer_id,
+            name: results.officer_name,
+            rank: 'RS',
+            fitrep_count: results.imported
+          }]);
+
+          setProgress(100);
+          setCurrentFile(`✅ Successfully imported ${results.imported} FITREPs from RS summary list!`);
+          setProcessingComplete(true);
+
+        } catch (procError) {
+          console.error('RS list import error:', procError);
+          clearInterval(progressInterval);
+          throw procError;
+        }
+
+      } else if (uploadMode === 'individual') {
+        // Individual mode: Extract everything from individual FITREP PDFs
+        console.log('[INDIVIDUAL MODE] Starting individual FITREP upload');
+        setCurrentFile('🔍 Extracting officer info from PDFs...');
 
         const startTime = Date.now();
         const estimatedTimePerFile = 9000; // 9 seconds per file average
@@ -366,55 +428,87 @@ const CreateProfilePage: React.FC = () => {
         <p>Upload your FITREP PDF files to create your performance profile and analysis.</p>
       </div>
 
-      <div className="card" style={{ backgroundColor: uploadMode === 'auto' ? '#e8f5e8' : '#f8f9fa' }}>
+      <div className="card">
         <h3>🚀 Choose Upload Method</h3>
-        
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px' }}>
-          <div 
-            style={{ 
-              padding: '20px', 
-              border: uploadMode === 'auto' ? '3px solid #28a745' : '2px solid #ddd',
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', marginTop: '20px' }}>
+          <div
+            style={{
+              padding: '20px',
+              border: uploadMode === 'individual' ? '3px solid #28a745' : '2px solid #ddd',
               borderRadius: '8px',
               cursor: 'pointer',
-              backgroundColor: uploadMode === 'auto' ? '#fff' : '#f8f9fa',
+              backgroundColor: uploadMode === 'individual' ? '#e8f5e8' : '#f8f9fa',
               transition: 'all 0.3s ease'
             }}
-            onClick={() => setUploadMode('auto')}
+            onClick={() => setUploadMode('individual')}
           >
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
-              <input 
-                type="radio" 
-                checked={uploadMode === 'auto'} 
-                onChange={() => setUploadMode('auto')}
+              <input
+                type="radio"
+                checked={uploadMode === 'individual'}
+                onChange={() => setUploadMode('individual')}
                 style={{ marginRight: '10px' }}
               />
-              <h4 style={{ margin: 0, color: '#28a745' }}>🎯 Auto Upload (Recommended)</h4>
+              <h4 style={{ margin: 0, color: '#28a745' }}>📄 Individual FITREPs</h4>
             </div>
             <p style={{ margin: 0, fontSize: '0.95rem' }}>
-              <strong>Zero manual entry!</strong> Just upload your PDFs and we'll extract all your information automatically from the reports.
+              <strong>Upload individual FITREP PDFs</strong> with full trait scores.
             </p>
             <ul style={{ marginTop: '10px', paddingLeft: '20px', fontSize: '0.9rem', color: '#666' }}>
-              <li>Extracts name, rank, and EDIPI from PDFs</li>
-              <li>No typing required</li>
-              <li>Fastest setup</li>
+              <li>Extracts actual trait scores (A-G)</li>
+              <li>Real FITREP IDs from documents</li>
+              <li>Full data extraction</li>
+              <li>Most accurate</li>
             </ul>
           </div>
-          
-          <div 
-            style={{ 
-              padding: '20px', 
+
+          <div
+            style={{
+              padding: '20px',
+              border: uploadMode === 'summary' ? '3px solid #0066cc' : '2px solid #ddd',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              backgroundColor: uploadMode === 'summary' ? '#e6f2ff' : '#f8f9fa',
+              transition: 'all 0.3s ease'
+            }}
+            onClick={() => setUploadMode('summary')}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
+              <input
+                type="radio"
+                checked={uploadMode === 'summary'}
+                onChange={() => setUploadMode('summary')}
+                style={{ marginRight: '10px' }}
+              />
+              <h4 style={{ margin: 0, color: '#0066cc' }}>📋 RS Summary List</h4>
+            </div>
+            <p style={{ margin: 0, fontSize: '0.95rem' }}>
+              <strong>Upload RS summary PDF</strong> containing all Marines' FRA scores.
+            </p>
+            <ul style={{ marginTop: '10px', paddingLeft: '20px', fontSize: '0.9rem', color: '#666' }}>
+              <li>⚠️ Generates synthetic trait scores</li>
+              <li>⚠️ Creates placeholder FITREP IDs</li>
+              <li>Only FRA scores are real</li>
+              <li>Fastest for bulk import</li>
+            </ul>
+          </div>
+
+          <div
+            style={{
+              padding: '20px',
               border: uploadMode === 'manual' ? '3px solid #CC0000' : '2px solid #ddd',
               borderRadius: '8px',
               cursor: 'pointer',
-              backgroundColor: uploadMode === 'manual' ? '#fff' : '#f8f9fa',
+              backgroundColor: uploadMode === 'manual' ? '#ffe6e6' : '#f8f9fa',
               transition: 'all 0.3s ease'
             }}
             onClick={() => setUploadMode('manual')}
           >
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
-              <input 
-                type="radio" 
-                checked={uploadMode === 'manual'} 
+              <input
+                type="radio"
+                checked={uploadMode === 'manual'}
                 onChange={() => setUploadMode('manual')}
                 style={{ marginRight: '10px' }}
               />
@@ -537,10 +631,28 @@ const CreateProfilePage: React.FC = () => {
         </div>
       )}
 
+      {uploadMode === 'summary' && (
+        <div className="card" style={{ backgroundColor: '#fff3cd', borderColor: '#ffc107', borderWidth: '2px' }}>
+          <h3 style={{ color: '#856404', marginTop: 0 }}>⚠️ Important: RS Summary Mode Limitations</h3>
+          <p style={{ color: '#856404', marginBottom: '10px' }}>
+            When uploading an RS Summary List, please be aware:
+          </p>
+          <ul style={{ color: '#856404', paddingLeft: '20px', marginBottom: '10px' }}>
+            <li><strong>FITREP IDs are synthetic:</strong> The system generates placeholder IDs since summary lists don't contain actual FITREP numbers</li>
+            <li><strong>Trait scores are mathematically generated:</strong> Individual trait scores (A-G) are calculated to match the documented FRA value, but won't match the actual traits in the original reports</li>
+            <li><strong>Only FRA scores are accurate:</strong> The FRA (Fitness Report Average) values are extracted directly from the summary and are accurate</li>
+            <li><strong>RV calculations are correct:</strong> Relative Value calculations work normally since they only require FRA scores</li>
+          </ul>
+          <p style={{ color: '#856404', marginBottom: 0 }}>
+            <strong>Recommendation:</strong> Use Individual FITREP upload for the most accurate data if you have access to the full reports.
+          </p>
+        </div>
+      )}
+
       <div className="card">
         <h3>Upload FITREP Files</h3>
-        
-        <div 
+
+        <div
           {...getRootProps()} 
           style={{
             border: '3px dashed #ccc',
@@ -611,22 +723,22 @@ const CreateProfilePage: React.FC = () => {
             </div>
             
             <div style={{ marginTop: '20px', textAlign: 'center' }}>
-              <button 
+              <button
                 onClick={handleUpload}
                 className="btn btn-primary"
-                disabled={uploadMode === 'auto' ? files.length === 0 : (!officerData.last_name || !officerData.first_name || !officerData.service_number || files.length === 0)}
-                style={{ 
-                  fontSize: '1.1rem', 
+                disabled={uploadMode !== 'manual' ? files.length === 0 : (!officerData.last_name || !officerData.first_name || !officerData.service_number || files.length === 0)}
+                style={{
+                  fontSize: '1.1rem',
                   padding: '15px 30px',
-                  opacity: (uploadMode === 'auto' ? files.length === 0 : (!officerData.last_name || !officerData.first_name || !officerData.service_number || files.length === 0)) ? 0.5 : 1
+                  opacity: (uploadMode !== 'manual' ? files.length === 0 : (!officerData.last_name || !officerData.first_name || !officerData.service_number || files.length === 0)) ? 0.5 : 1
                 }}
               >
-                {uploadMode === 'auto' ? '🚀 Auto Create Profile' : 'Create Profile'} ({files.length} files)
+                {uploadMode === 'individual' ? '📄 Upload Individual FITREPs' : uploadMode === 'summary' ? '📋 Import RS Summary' : 'Create Profile'} ({files.length} files)
               </button>
-              
-              {uploadMode === 'auto' && files.length === 0 && (
+
+              {uploadMode !== 'manual' && files.length === 0 && (
                 <p style={{ color: '#721c24', fontSize: '0.9rem', marginTop: '10px' }}>
-                  Please upload at least one FITREP PDF file
+                  Please upload at least one PDF file
                 </p>
               )}
               

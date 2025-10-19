@@ -969,9 +969,10 @@ const ProfileViewPage: React.FC = () => {
 
                   setIsCalculating(true);
                   try {
-                    // Get the RS name from profileData - use the exact format from the database
-                    // The officer_info.name should already be in the correct format
-                    const rsName = profileData?.officer_info.name || '';
+                    // Get the RS name from the actual reports to ensure exact match with database
+                    // The reporting_senior field in reports matches exactly what's stored in FitReport table
+                    const firstReport = selectedRankData?.reports?.[0];
+                    const rsName = firstReport?.reporting_senior || profileData?.officer_info.name || '';
 
                     console.log('DEBUG: Sending predict-impact request with RS:', rsName, 'Rank:', selectedRank);
 
